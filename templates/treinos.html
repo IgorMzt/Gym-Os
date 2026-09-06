@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titulo %}Fichas de treino · Panobianco{% endblock %}
+{% block page_title_top %}Fichas de treino{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52 workout-head-v55">
+  <div>
+    <div class="eyebrow">PRESCRIÇÃO</div>
+    <h1>Fichas de treino</h1>
+    <p>Monte rotinas A/B/C/D usando os exercícios cadastrados na biblioteca técnica.</p>
+  </div>
+  <button class="btn btn--primario" id="nova-ficha" type="button">+ Nova ficha</button>
+</section>
+
+<section class="exercise-kpis-v54">
+  <article class="panel"><span>Fichas</span><strong>{{ estatisticas.total }}</strong></article>
+  <article class="panel"><span>Ativas</span><strong>{{ estatisticas.ativas }}</strong></article>
+  <article class="panel"><span>Alunos com ficha</span><strong>{{ estatisticas.alunos_com_ficha }}</strong></article>
+  <article class="panel"><span>Alunos sem ficha</span><strong>{{ estatisticas.alunos_sem_ficha }}</strong></article>
+</section>
+
+<section class="panel workout-list-panel-v55">
+  <div class="exercise-toolbar-v54 workout-filter-v55">
+    <input id="busca-ficha" placeholder="Buscar aluno, ficha ou professor...">
+    <select id="status-ficha"><option value="ativa">Ativas</option><option value="todas">Todas</option><option value="inativa">Inativas</option></select>
+  </div>
+  <div class="workout-grid-v55" id="workout-grid">
+    {% for f in fichas %}
+    <article class="workout-card-v55" data-search="{{ (f.aluno_nome ~ ' ' ~ f.nome ~ ' ' ~ (f.professor_nome or ''))|lower|e }}" data-ativo="{{ 1 if f.ativo else 0 }}">
+      <div class="workout-card-top-v55">
+        <div><small>{{ f.aluno_nome }}</small><h3>{{ f.nome }}</h3></div>
+        <span class="badge {{ 'badge--success' if f.ativo else 'badge--muted' }}">{{ 'Ativa' if f.ativo else 'Inativa' }}</span>
+      </div>
+      <p>{{ f.objetivo or 'Objetivo não informado' }}</p>
+      <div class="workout-meta-v55">
+        <span>Professor: {{ f.professor_nome or 'Não definido' }}</span>
+        <span>{{ f.data_inicio or 'Sem início' }}{% if f.data_fim %} → {{ f.data_fim }}{% endif %}</span>
+      </div>
+      <button class="btn btn--secundario editar-ficha" data-id="{{ f.id }}" type="button">Abrir ficha</button>
+<button class="btn btn--secundario duplicar-ficha-v591" data-id="{{ f.id }}" data-nome="{{ f.nome|e }}" type="button">Duplicar</button>
+    </article>
+    {% else %}
+    <div class="empty-state-v53">Nenhuma ficha de treino criada ainda.</div>
+    {% endfor %}
+  </div>
+  <div class="empty-state-v53" id="ficha-empty" hidden>Nenhuma ficha corresponde aos filtros.</div>
+</section>
+
+<dialog id="workout-dialog" class="dialog-v52 dialog-workout-v55">
+<form id="workout-form" method="dialog">
+  <div class="dialog-head-v52">
+    <div><div class="eyebrow">PRESCRIÇÃO DE TREINO</div><h2 id="workout-title">Nova ficha</h2></div>
+    <button class="dialog-close-v52" id="workout-close" type="button">×</button>
+  </div>
+  <input id="ficha-id" type="hidden">
+
+  <div class="form-grid">
+    <div><label>Aluno *</label><select id="ficha-aluno" required><option value="">Selecione...</option>{% for p in pessoas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select></div>
+    <div><label>Professor responsável</label><select id="ficha-professor"><option value="">Não definido</option>{% for p in professores %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select></div>
+    <div><label>Nome da ficha *</label><input id="ficha-nome" required maxlength="120" placeholder="Ex.: Hipertrofia ABC"></div>
+    <div><label>Objetivo</label><input id="ficha-objetivo" maxlength="500" placeholder="Ex.: Hipertrofia com foco em membros superiores"></div>
+    <div><label>Início</label><input id="ficha-inicio" type="date"></div>
+    <div><label>Fim / revisão</label><input id="ficha-fim" type="date"></div>
+  </div>
+  <div><label>Observações gerais</label><textarea id="ficha-observacoes" rows="2" maxlength="2000"></textarea></div>
+  <label class="check-row-v52"><input id="ficha-ativa" type="checkbox" checked> Tornar esta a ficha ativa do aluno</label>
+
+  <div class="workout-builder-head-v55">
+    <div><h3>Rotina da ficha</h3><p>Crie os treinos A/B/C/D e organize os exercícios.</p></div>
+    <button class="btn btn--secundario" id="add-treino" type="button">+ Adicionar treino</button>
+  </div>
+  <div id="treinos-builder"></div>
+
+  <div id="workout-msg"></div>
+  <div class="dialog-actions-v52">
+    <button class="btn btn--secundario" id="workout-cancel" type="button">Cancelar</button>
+    <button class="btn btn--primario" id="workout-save" type="submit">Salvar ficha</button>
+  </div>
+</form>
+</dialog>
+
+<dialog id="duplicate-workout-v591" class="dialog-v52"><div class="dialog-head-v52"><div><div class="eyebrow">REUTILIZAR FICHA</div><h2>Duplicar ficha</h2></div><button class="dialog-close-v52" id="duplicate-close-v591">×</button></div><p id="duplicate-name-v591"></p><label>Aluno de destino</label><select id="duplicate-student-v591"><option value="">Selecione...</option>{% for p in pessoas %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select><div id="duplicate-msg-v591"></div><div class="dialog-actions-v52"><button class="btn btn--secundario" id="duplicate-cancel-v591">Cancelar</button><button class="btn btn--primario" id="duplicate-confirm-v591">Criar cópia</button></div></dialog>
+<dialog id="exercise-picker-v55" class="dialog-v52 picker-v55">
+  <div class="dialog-head-v52"><div><div class="eyebrow">BIBLIOTECA</div><h2>Adicionar exercício</h2></div><button class="dialog-close-v52" id="picker-close" type="button">×</button></div>
+  <input id="picker-search" placeholder="Buscar por exercício, grupo ou equipamento...">
+  <div class="picker-list-v55" id="picker-list">
+    {% for e in exercicios %}
+    <button type="button" class="picker-item-v55" data-id="{{ e.id }}" data-nome="{{ e.nome|e }}" data-grupo="{{ e.grupo_muscular|e }}" data-search="{{ (e.nome ~ ' ' ~ e.grupo_muscular ~ ' ' ~ (e.equipamento or ''))|lower|e }}">
+      <strong>{{ e.nome }}</strong><span>{{ e.grupo_muscular }}{% if e.equipamento %} · {{ e.equipamento }}{% endif %}</span>
+    </button>
+    {% endfor %}
+  </div>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/treinos.js', v='5.9.1') }}"></script>{% endblock %}

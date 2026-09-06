@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101010" id="meta-theme-color">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" type="image/png" sizes="64x64" href="{{ url_for('static', filename='assets/favicon.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/favicon.png') }}">
+  <script>
+    (() => {
+      const legado = { claro: 'light', sistema: 'system', escuro: 'dark' };
+      const salvo = localStorage.getItem('panobianco-tema');
+      const tema = legado[salvo] || salvo || {{ tema_padrao|default('system')|tojson }};
+      document.documentElement.dataset.tema = ['light','system','dark'].includes(tema) ? tema : 'system';
+    })();
+  </script>
+  <title>{% block titulo %}Panobianco · Gestão{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='5.9.1') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %} {{ 'admin-shell-active' if session.get('usuario_logado') else 'public-shell' }}">
+{% if session.get('usuario_logado') %}
+  <aside class="admin-sidebar" id="admin-sidebar">
+    <a class="admin-brand" href="{{ url_for('pagina_minha_area') if session.get('usuario_papel') == 'PROFESSOR' else url_for('pagina_painel') }}">
+      <img src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
+      <span><strong>PANOBIANCO</strong><small>GYM OS</small></span>
+    </a>
+
+    <nav class="admin-nav" aria-label="Navegação do sistema">
+      {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
+      <div class="admin-nav__section">GESTÃO</div>
+      <a href="{{ url_for('pagina_painel') }}" class="{{ 'ativo' if request.path == '/' else '' }}"><span>⌂</span>Dashboard</a>
+      <a href="{{ url_for('pagina_gerenciar') }}" class="{{ 'ativo' if request.path == '/gerenciar' or request.path.startswith('/alunos/') or request.path == '/cadastro' else '' }}"><span>◎</span>Alunos</a>
+      {% endif %}
+      {% if session.get('usuario_papel') == 'ADMIN' %}
+      <a href="{{ url_for('pagina_planos') }}" class="{{ 'ativo' if request.path == '/planos' else '' }}"><span>▣</span>Planos</a>
+      <a href="{{ url_for('pagina_professores') }}" class="{{ 'ativo' if request.path.startswith('/professores') else '' }}"><span>♟</span>Professores</a>
+      <a href="{{ url_for('pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
+      <a href="{{ url_for('pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
+      <a href="{{ url_for('pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
+      <a href="{{ url_for('pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
+      {% endif %}
+
+      {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
+      <div class="admin-nav__section">OPERAÇÃO</div>
+      <a href="{{ url_for('pagina_catraca') }}" class="{{ 'ativo' if request.path in ['/catraca','/verificacao'] else '' }}"><span>⇥</span>Catraca</a>
+      <a href="{{ url_for('pagina_historico') }}" class="{{ 'ativo' if request.path == '/historico' else '' }}"><span>↺</span>Histórico</a>
+      {% endif %}
+
+      {% if session.get('usuario_papel') == 'PROFESSOR' %}
+      <div class="admin-nav__section">PROFESSOR</div>
+      <a href="{{ url_for('pagina_minha_area') }}" class="{{ 'ativo' if request.path == '/minha-area' else '' }}"><span>◇</span>Minha área</a>
+      <a href="{{ url_for('pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
+      <a href="{{ url_for('pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
+      <a href="{{ url_for('pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
+      <a href="{{ url_for('pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
+      {% endif %}
+
+      {% if session.get('usuario_papel') == 'ADMIN' %}
+      <div class="admin-nav__section">SISTEMA</div>
+      <a href="{{ url_for('pagina_usuarios') }}" class="{{ 'ativo' if request.path == '/usuarios' else '' }}"><span>♙</span>Usuários</a>
+      <a href="{{ url_for('pagina_configuracoes') }}" class="{{ 'ativo' if request.path == '/configuracoes' else '' }}"><span>⚙</span>Configurações</a>
+      <a href="{{ url_for('pagina_diagnostico') }}" class="{{ 'ativo' if request.path == '/diagnostico' else '' }}"><span>◇</span>Diagnóstico</a>
+      {% endif %}
+    </nav>
+
+    <div class="admin-sidebar__future">
+      <span>PRÓXIMO MÓDULO</span>
+      <strong>Produção · V6</strong>
+      <small>API, PostgreSQL, deploy e preparação para multiunidade.</small>
+    </div>
+
+    <div class="admin-sidebar__footer">
+      <div class="theme-switcher" role="group" aria-label="Modo de tela">
+        <button type="button" class="theme-btn" data-tema="light" title="Modo claro">☀</button>
+        <button type="button" class="theme-btn" data-tema="system" title="Tema do sistema">◐</button>
+        <button type="button" class="theme-btn" data-tema="dark" title="Modo escuro">◑</button>
+      </div>
+      <a class="admin-logout" href="{{ url_for('logout') }}">Sair</a>
+    </div>
+  </aside>
+
+  <div class="admin-app">
+    <header class="admin-topbar">
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Abrir menu">☰</button>
+      <div>
+        <strong>{% block page_title_top %}Panobianco Gym OS{% endblock %}</strong>
+        <small id="admin-topbar-date">Sistema de gestão da unidade</small>
+      </div>
+      {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}<div class="global-search-v591"><input id="global-search-v591" placeholder="Buscar aluno, CPF ou matrícula..." autocomplete="off"><div id="global-results-v591" class="global-results-v591" hidden></div></div>{% endif %}
+      <div class="admin-topbar__right">
+        <span class="system-live"><i></i>SISTEMA ATIVO</span>
+        <div class="user-chip-v52"><div><strong>{{ session.get('usuario_nome', 'Usuário') }}</strong><small>{{ papeis_usuario.get(session.get('usuario_papel'), session.get('usuario_papel','')) }}</small></div></div>
+        <span class="topbar-clock" id="relogio">--:--:--</span>
+      </div>
+    </header>
+
+    {% if credencial_padrao %}
+    <div class="security-banner"><strong>Segurança:</strong> a senha administrativa padrão ainda está ativa. Defina <code>ADMIN_PASSWORD</code> antes de usar em produção.</div>
+    {% endif %}
+
+{% else %}
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('pagina_catraca') }}">
+      <img class="brand-mark-img" src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
+      <span><strong>PANOBIANCO</strong><small>CONTROLE DE ACESSO</small></span>
+    </a>
+    <div class="topbar-right">
+      <div class="theme-switcher" role="group" aria-label="Modo de tela">
+        <button type="button" class="theme-btn" data-tema="light">☀</button>
+        <button type="button" class="theme-btn" data-tema="system">◐</button>
+        <button type="button" class="theme-btn" data-tema="dark">◑</button>
+      </div>
+      <div class="topbar-clock" id="relogio">--:--:--</div>
+      <a class="logout-link" href="{{ url_for('pagina_login') }}">Equipe</a>
+    </div>
+  </header>
+{% endif %}
+
+  <main class="container {{ 'admin-container' if session.get('usuario_logado') else '' }}">
+    {% block conteudo %}{% endblock %}
+  </main>
+
+{% if session.get('usuario_logado') %}
+  </div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+{% endif %}
+
+<script>
+window.TEMA_PADRAO = {{ tema_padrao|default("system")|tojson }};
+window.CSRF_TOKEN = {{ csrf_token|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/common.js', v='5.9.1') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

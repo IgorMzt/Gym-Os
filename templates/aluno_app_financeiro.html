@@ -1,0 +1,46 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}Financeiro · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-page-title-v58"><small>MINHA MENSALIDADE</small><h1>Financeiro</h1><p>Acompanhe seu plano, vencimento e pagamentos.</p></section>
+
+<section class="student-finance-hero-v59 {{ 'is-ok' if pessoa.status_financeiro_efetivo == 'EM_DIA' else 'is-alert' }}">
+  <div><small>SITUAÇÃO ATUAL</small><h2 id="finance-status-v59">{{ pessoa.status_financeiro_efetivo|replace('_',' ')|title }}</h2><p>Plano {{ pessoa.plano or 'não informado' }}</p></div>
+  <div class="student-finance-due-v59"><span>Vencimento</span><strong>{{ pessoa.data_vencimento|data_br if pessoa.data_vencimento else '—' }}</strong>{% if plano %}<b>{{ plano.valor_centavos|moeda }}</b>{% endif %}</div>
+</section>
+
+{% if cobranca_aberta %}
+<section class="student-pix-v59" id="pix-card-v59">
+  <div class="student-section-head-v58"><div><small>PIX DISPONÍVEL</small><h2>Pagamento</h2></div><span class="student-finance-badge-v59" id="pix-status-v59">{{ cobranca_aberta.status }}</span></div>
+  <div class="student-pix-amount-v59"><span>Valor</span><strong>{{ cobranca_aberta.valor_centavos|moeda }}</strong><small>Vencimento {{ cobranca_aberta.vencimento_original|data_br }}</small></div>
+  {% if cobranca_aberta.pix_qr_base64 %}<img id="pix-qr-v59" class="student-pix-qr-v59" src="data:image/png;base64,{{ cobranca_aberta.pix_qr_base64 }}" alt="QR Code PIX">{% endif %}
+  <label class="student-pix-code-v59">PIX copia e cola<textarea id="pix-code-v59" readonly>{{ cobranca_aberta.pix_payload or '' }}</textarea></label>
+  {% if cobranca_aberta.pix_payload %}<button id="copy-pix-v59" class="student-primary-v58">Copiar código PIX</button>{% endif %}
+  <p class="student-pix-hint-v59">Após o pagamento, a situação é atualizada automaticamente quando o Asaas confirmar.</p>
+</section>
+{% elif pessoa.status_financeiro_efetivo != 'EM_DIA' or pessoa.status_financeiro == 'PENDENTE' %}
+<section class="student-pix-v59" id="pix-card-v59">
+  <div class="student-section-head-v58"><div><small>PAGAMENTO</small><h2>Gerar PIX</h2></div></div>
+  {% if asaas_configurado %}
+  <p class="student-pix-intro-v59">Gere a cobrança referente ao vencimento atual e pague diretamente pelo seu banco.</p>
+  <button id="generate-pix-v59" class="student-primary-v58">Gerar PIX de {{ plano.valor_centavos|moeda if plano else 'pagamento' }}</button>
+  {% else %}
+  <div class="student-empty-v58"><b>Pagamento indisponível</b><span>A integração financeira ainda não está configurada. Procure a recepção.</span></div>
+  {% endif %}
+</section>
+{% else %}
+<section class="student-paid-v59"><b>✓ Mensalidade em dia</b><span>Não existe cobrança pendente para o vencimento atual.</span></section>
+{% endif %}
+
+<section class="student-section-v58">
+<div class="student-section-head-v58"><div><small>HISTÓRICO</small><h2>Pagamentos e cobranças</h2></div></div>
+{% for c in cobrancas %}
+<div class="student-finance-row-v59">
+  <div><strong>{{ c.vencimento_original|data_br }}</strong><span>{{ c.data_pagamento or 'Cobrança gerada em ' ~ c.data_criacao }}</span></div>
+  <div><b>{{ c.valor_centavos|moeda }}</b><span class="finance-state-{{ c.status|lower }}">{{ c.status }}</span></div>
+</div>
+{% else %}
+<div class="student-empty-v58"><b>Nenhuma cobrança</b><span>Seu histórico financeiro aparecerá aqui.</span></div>
+{% endfor %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/aluno_app_financeiro.js',v='5.9.0') }}"></script>{% endblock %}

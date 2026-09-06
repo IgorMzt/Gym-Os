@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block titulo %}Alunos · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row reception-header">
+  <div>
+    <div class="eyebrow">RECEPÇÃO</div>
+    <h1>Alunos</h1>
+    <p>Busque, filtre e execute as principais ações sem perder o contexto da recepção.</p>
+  </div>
+  <a class="btn btn--primario" href="{{ url_for('pagina_cadastro') }}">+ Novo aluno</a>
+</div>
+
+<section class="student-kpis" aria-label="Resumo dos alunos">
+  <button class="student-kpi student-kpi--primary" type="button" data-filter-shortcut="ativos">
+    <span>ALUNOS ATIVOS</span><strong>{{ resumo.ativos }}</strong><small>com acesso permitido</small>
+  </button>
+  <button class="student-kpi" type="button" data-filter-shortcut="vencendo">
+    <span>VENCENDO</span><strong>{{ resumo.vencendo }}</strong><small>próximos {{ dias_alerta }} dias</small>
+  </button>
+  <button class="student-kpi" type="button" data-filter-shortcut="vencidos">
+    <span>VENCIDOS</span><strong>{{ resumo.vencidos }}</strong><small>plano expirado</small>
+  </button>
+  <button class="student-kpi" type="button" data-filter-shortcut="bloqueados">
+    <span>BLOQUEADOS</span><strong>{{ resumo.bloqueados }}</strong><small>bloqueio manual</small>
+  </button>
+</section>
+
+<div class="toolbar panel reception-toolbar">
+  <div class="search-box search-box--large"><span>⌕</span><input id="busca-aluno" type="search" autocomplete="off" placeholder="Buscar por nome, CPF ou matrícula..."></div>
+  <div class="toolbar-info"><span id="contador-resultados">{{ resumo.total }} aluno(s)</span></div>
+</div>
+
+<div class="student-filterbar" id="student-filterbar" role="group" aria-label="Filtros de alunos">
+  <button class="filter-pill is-active" type="button" data-filtro="todos">Todos <span>{{ resumo.total }}</span></button>
+  <button class="filter-pill" type="button" data-filtro="ativos">Ativos <span>{{ resumo.ativos }}</span></button>
+  <button class="filter-pill" type="button" data-filtro="vencendo">Vencendo <span>{{ resumo.vencendo }}</span></button>
+  <button class="filter-pill" type="button" data-filtro="vencidos">Vencidos <span>{{ resumo.vencidos }}</span></button>
+  <button class="filter-pill" type="button" data-filtro="bloqueados">Bloqueados <span>{{ resumo.bloqueados }}</span></button>
+  <button class="filter-pill" type="button" data-filtro="inadimplentes">Inadimplentes <span>{{ resumo.inadimplentes }}</span></button>
+</div>
+
+<div id="student-action-message" class="student-action-message" aria-live="polite"></div>
+
+<section class="panel student-table-panel">
+  <div class="table-scroll">
+    <table class="data-table data-table--students reception-table">
+      <thead><tr><th>Aluno</th><th>Matrícula</th><th>Plano</th><th>Vencimento</th><th>Status</th><th>Último acesso</th><th>Ações</th></tr></thead>
+      <tbody id="tabela-pessoas">
+      {% for pessoa in pessoas %}
+      <tr class="student-entry"
+          data-kind="row"
+          data-id="{{ pessoa.id }}"
+          data-search="{{ (pessoa.nome ~ ' ' ~ (pessoa.cpf or '') ~ ' ' ~ (pessoa.matricula or ''))|lower }}"
+          data-ativos="{{ 1 if pessoa.filtro_ativo else 0 }}"
+          data-vencendo="{{ 1 if pessoa.filtro_vencendo else 0 }}"
+          data-vencidos="{{ 1 if pessoa.filtro_vencido else 0 }}"
+          data-bloqueados="{{ 1 if pessoa.filtro_bloqueado else 0 }}"
+          data-inadimplentes="{{ 1 if pessoa.filtro_inadimplente else 0 }}">
+        <td>
+          <a class="table-person table-person--link" href="{{ url_for('pagina_aluno', pessoa_id=pessoa.id) }}">
+            <div class="avatar avatar--photo">{% if pessoa.foto_path %}<img src="{{ url_for('static', filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+            <div><strong>{{ pessoa.nome }}</strong><small>{{ pessoa.cpf or 'CPF não informado' }}</small></div>
+          </a>
+        </td>
+        <td class="mono">{{ pessoa.matricula or '—' }}</td>
+        <td>{{ pessoa.plano or '—' }}</td>
+        <td class="mono student-expiry" data-vencimento="{{ pessoa.data_vencimento or '' }}">
+          {{ pessoa.data_vencimento|data_br }}
+          {% if pessoa.filtro_vencendo and pessoa.dias_para_vencer is not none %}<small class="expiry-warning">{{ pessoa.dias_para_vencer }}d</small>{% endif %}
+        </td>
+        <td><span class="student-status status--{{ pessoa.status_operacional|lower }}">{{ pessoa.status_operacional }}</span></td>
+        <td class="mono">{{ pessoa.ultimo_acesso|data_br if pessoa.ultimo_acesso else 'Nunca' }}</td>
+        <td class="actions actions--reception">
+          <a class="btn btn--pequeno btn--outline" href="{{ url_for('pagina_aluno', pessoa_id=pessoa.id) }}">Perfil</a>
+          <button class="btn btn--pequeno btn--outline" type="button" data-acao="renovar" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}" data-plano-id="{{ pessoa.plano_id or '' }}">Renovar</button>
+          {% if pessoa.liberado %}<button class="btn btn--pequeno" type="button" data-acao="bloquear" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}">Bloquear</button>{% else %}<button class="btn btn--pequeno btn--sucesso" type="button" data-acao="liberar" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}">Desbloquear</button>{% endif %}
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7" class="empty-state">Nenhum aluno cadastrado.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="student-mobile-grid" id="student-mobile-grid" aria-label="Alunos em cartões">
+  {% for pessoa in pessoas %}
+  <article class="student-mobile-card student-entry"
+      data-kind="card"
+      data-id="{{ pessoa.id }}"
+      data-search="{{ (pessoa.nome ~ ' ' ~ (pessoa.cpf or '') ~ ' ' ~ (pessoa.matricula or ''))|lower }}"
+      data-ativos="{{ 1 if pessoa.filtro_ativo else 0 }}"
+      data-vencendo="{{ 1 if pessoa.filtro_vencendo else 0 }}"
+      data-vencidos="{{ 1 if pessoa.filtro_vencido else 0 }}"
+      data-bloqueados="{{ 1 if pessoa.filtro_bloqueado else 0 }}"
+      data-inadimplentes="{{ 1 if pessoa.filtro_inadimplente else 0 }}">
+    <div class="student-mobile-card__head">
+      <div class="avatar avatar--photo avatar--large">{% if pessoa.foto_path %}<img src="{{ url_for('static', filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+      <div class="student-mobile-card__identity"><strong>{{ pessoa.nome }}</strong><span>#{{ pessoa.matricula or '—' }}</span></div>
+      <span class="student-status status--{{ pessoa.status_operacional|lower }}">{{ pessoa.status_operacional }}</span>
+    </div>
+    <div class="student-mobile-card__details">
+      <div><small>PLANO</small><strong>{{ pessoa.plano or '—' }}</strong></div>
+      <div><small>VENCIMENTO</small><strong class="student-expiry">{{ pessoa.data_vencimento|data_br }}</strong></div>
+      <div><small>CPF</small><strong>{{ pessoa.cpf or '—' }}</strong></div>
+      <div><small>ÚLTIMO ACESSO</small><strong>{{ pessoa.ultimo_acesso|data_br if pessoa.ultimo_acesso else 'Nunca' }}</strong></div>
+    </div>
+    <div class="student-mobile-card__actions">
+      <a class="btn btn--outline" href="{{ url_for('pagina_aluno', pessoa_id=pessoa.id) }}">Ver perfil</a>
+      <button class="btn btn--outline" type="button" data-acao="renovar" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}" data-plano-id="{{ pessoa.plano_id or '' }}">Renovar</button>
+      {% if pessoa.liberado %}<button class="btn" type="button" data-acao="bloquear" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}">Bloquear</button>{% else %}<button class="btn btn--sucesso" type="button" data-acao="liberar" data-id="{{ pessoa.id }}" data-nome="{{ pessoa.nome|e }}">Desbloquear</button>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+
+<div class="student-empty-filter hidden" id="student-empty-filter">
+  <strong>Nenhum aluno encontrado</strong><span>Tente outro termo ou altere o filtro selecionado.</span>
+</div>
+
+<div class="confirm-modal hidden" id="student-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="student-confirm-title">
+  <div class="confirm-modal__backdrop" data-modal-close></div>
+  <div class="confirm-modal__card">
+    <div class="eyebrow">CONFIRMAÇÃO</div>
+    <h2 id="student-confirm-title">Confirmar ação</h2>
+    <p id="student-confirm-text"></p>
+    <div class="button-row"><button class="btn btn--outline" type="button" data-modal-close>Cancelar</button><button class="btn btn--primario" type="button" id="student-confirm-action">Confirmar</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/gerenciar.js', v='4.5.0') }}"></script>{% endblock %}

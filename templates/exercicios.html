@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block titulo %}Exercícios · Panobianco{% endblock %}
+{% block page_title_top %}Banco de exercícios{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52 exercise-head-v54">
+  <div>
+    <div class="eyebrow">TREINAMENTO</div>
+    <h1>Banco de exercícios</h1>
+    <p>Biblioteca técnica compartilhada por Admin e Professores para a montagem das fichas de treino.</p>
+  </div>
+  <button class="btn btn--primario" id="novo-exercicio" type="button">+ Novo exercício</button>
+</section>
+
+<section class="exercise-kpis-v54">
+  <article class="panel"><span>Total</span><strong>{{ estatisticas.total }}</strong></article>
+  <article class="panel"><span>Ativos</span><strong>{{ estatisticas.ativos }}</strong></article>
+  <article class="panel"><span>Grupos musculares</span><strong>{{ estatisticas.grupos }}</strong></article>
+  <article class="panel"><span>Equipamentos</span><strong>{{ estatisticas.equipamentos }}</strong></article>
+</section>
+
+<section class="panel exercise-library-v54">
+  <div class="exercise-toolbar-v54">
+    <input id="busca-exercicio" class="search-v53" placeholder="Buscar exercício, grupo ou equipamento...">
+    <select id="filtro-grupo">
+      <option value="">Todos os grupos</option>
+      {% for grupo in grupos %}<option value="{{ grupo|lower|e }}">{{ grupo }}</option>{% endfor %}
+    </select>
+    <select id="filtro-tipo">
+      <option value="">Todos os tipos</option>
+      {% for valor, rotulo in tipos_exercicio.items() %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+    </select>
+    <select id="filtro-status">
+      <option value="ativo">Ativos</option>
+      <option value="todos">Todos</option>
+      <option value="inativo">Inativos</option>
+    </select>
+  </div>
+
+  <div class="exercise-grid-v54" id="exercise-grid">
+    {% for e in exercicios %}
+    <article class="exercise-card-v54"
+      data-search="{{ (e.nome ~ ' ' ~ e.grupo_muscular ~ ' ' ~ (e.equipamento or '') ~ ' ' ~ (e.tipo or ''))|lower|e }}"
+      data-grupo="{{ e.grupo_muscular|lower|e }}"
+      data-tipo="{{ e.tipo }}"
+      data-ativo="{{ 1 if e.ativo else 0 }}">
+      <div class="exercise-media-v54">
+        {% if e.imagem_path %}
+        <img src="{{ url_for('static', filename=e.imagem_path) }}" alt="">
+        {% else %}
+        <span>▦</span>
+        {% endif %}
+      </div>
+      <div class="exercise-card-main-v54">
+        <div class="exercise-card-title-v54">
+          <div><small>{{ e.grupo_muscular }}</small><h3>{{ e.nome }}</h3></div>
+          <span class="badge {{ 'badge--success' if e.ativo else 'badge--muted' }}">{{ 'Ativo' if e.ativo else 'Inativo' }}</span>
+        </div>
+        <div class="exercise-tags-v54">
+          <span>{{ tipos_exercicio.get(e.tipo, e.tipo) }}</span>
+          {% if e.equipamento %}<span>{{ e.equipamento }}</span>{% endif %}
+          {% if e.dificuldade %}<span>{{ dificuldades_exercicio.get(e.dificuldade, e.dificuldade) }}</span>{% endif %}
+        </div>
+        {% if e.instrucoes %}<p>{{ e.instrucoes|truncate(150) }}</p>{% else %}<p class="muted-v53">Sem instruções cadastradas.</p>{% endif %}
+        <div class="exercise-actions-v54">
+          {% if e.video_url %}<a class="btn btn--secundario btn--mini" href="{{ e.video_url }}" target="_blank" rel="noopener">Vídeo ↗</a>{% endif %}
+          <button class="btn btn--secundario btn--mini editar-exercicio" data-id="{{ e.id }}" type="button">Editar</button>
+        </div>
+      </div>
+    </article>
+    {% else %}
+    <div class="empty-state-v53">Nenhum exercício cadastrado. Crie o primeiro exercício da biblioteca.</div>
+    {% endfor %}
+  </div>
+  <div id="exercise-empty-filter" class="empty-state-v53" hidden>Nenhum exercício corresponde aos filtros.</div>
+</section>
+
+<dialog id="exercise-dialog" class="dialog-v52 dialog-exercise-v54">
+  <form method="dialog" id="exercise-form" class="stack-form">
+    <div class="dialog-head-v52">
+      <div><div class="eyebrow">BIBLIOTECA TÉCNICA</div><h2 id="exercise-dialog-title">Novo exercício</h2></div>
+      <button class="dialog-close-v52" type="button" id="exercise-fechar">×</button>
+    </div>
+    <input id="exercise-id" type="hidden">
+
+    <div class="exercise-image-edit-v54">
+      <div class="exercise-preview-v54" id="exercise-preview">▦</div>
+      <div>
+        <label class="btn btn--secundario" for="exercise-imagem">Selecionar imagem</label>
+        <input id="exercise-imagem" type="file" accept="image/*" hidden>
+        <button class="link-danger-v53" id="exercise-remover-imagem" type="button">Remover imagem</button>
+        <small>Opcional. JPG/PNG até 5 MB.</small>
+      </div>
+    </div>
+
+    <div><label for="exercise-nome">Nome *</label><input id="exercise-nome" maxlength="120" required placeholder="Ex.: Supino reto com barra"></div>
+    <div class="form-grid">
+      <div><label for="exercise-grupo">Grupo muscular *</label><input id="exercise-grupo" maxlength="80" required list="grupos-musculares" placeholder="Ex.: Peitoral"></div>
+      <div><label for="exercise-equipamento">Equipamento</label><input id="exercise-equipamento" maxlength="100" list="equipamentos-lista" placeholder="Ex.: Barra e banco"></div>
+      <div><label for="exercise-tipo">Tipo</label><select id="exercise-tipo">{% for valor, rotulo in tipos_exercicio.items() %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}</select></div>
+      <div><label for="exercise-dificuldade">Dificuldade</label><select id="exercise-dificuldade"><option value="">Não definida</option>{% for valor, rotulo in dificuldades_exercicio.items() %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}</select></div>
+    </div>
+
+    <datalist id="grupos-musculares">{% for grupo in grupos %}<option value="{{ grupo }}">{% endfor %}</datalist>
+    <datalist id="equipamentos-lista">{% for item in equipamentos %}<option value="{{ item }}">{% endfor %}</datalist>
+
+    <div><label for="exercise-instrucoes">Instruções de execução</label><textarea id="exercise-instrucoes" rows="5" maxlength="4000" placeholder="Posicionamento, amplitude, respiração, cuidados..."></textarea></div>
+    <div><label for="exercise-video">Vídeo de referência</label><input id="exercise-video" type="url" maxlength="500" placeholder="https://..."></div>
+    <div><label for="exercise-observacoes">Observações internas</label><textarea id="exercise-observacoes" rows="3" maxlength="2000"></textarea></div>
+    <label class="check-row-v52"><input id="exercise-ativo" type="checkbox" checked> Exercício ativo na biblioteca</label>
+
+    <div id="exercise-msg"></div>
+    <div class="dialog-actions-v52">
+      <button class="btn btn--secundario" type="button" id="exercise-cancelar">Cancelar</button>
+      <button class="btn btn--primario" type="submit" id="exercise-salvar">Salvar exercício</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/exercicios.js', v='5.4.0') }}"></script>{% endblock %}

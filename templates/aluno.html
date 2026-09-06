@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block titulo %}Perfil do aluno · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row profile-page-header">
+  <div>
+    <div class="eyebrow">PERFIL DO ALUNO</div>
+    <h1>{{ pessoa.nome }}</h1>
+    <p>Matrícula {{ pessoa.matricula }} · dados, plano, biometria e histórico de acesso.</p>
+  </div>
+  <a class="btn btn--outline" href="{{ url_for('pagina_gerenciar') }}">← Voltar aos alunos</a>
+</div>
+
+<div id="perfil-mensagem" aria-live="polite"></div>
+
+<section class="student-profile-hero panel">
+  <div class="student-profile-identity">
+    <div class="profile-photo profile-photo--hero">{% if pessoa.foto_path %}<img src="{{ url_for('static', filename=pessoa.foto_path) }}" alt="Foto de {{ pessoa.nome }}">{% else %}<div class="profile-placeholder">{{ pessoa.nome[:1]|upper }}</div>{% endif %}</div>
+    <div>
+      <div class="eyebrow">STATUS ATUAL</div>
+      <h2>{{ pessoa.nome }}</h2>
+      <div class="profile-badges"><span class="student-status status--{{ pessoa.status_operacional|lower }}">{{ pessoa.status_operacional }}</span><span class="mini-tag">#{{ pessoa.matricula }}</span></div>
+      <p>{{ pessoa.plano or 'Sem plano' }} · vencimento {{ pessoa.data_vencimento|data_br }}</p>
+    </div>
+  </div>
+  <div class="student-profile-actions">
+    <button class="btn btn--primario" type="button" id="btn-renovar">Renovar plano</button>
+    {% if pessoa.liberado %}<button class="btn btn--outline" type="button" id="btn-toggle-acesso" data-acao="bloquear">Bloquear acesso</button>{% else %}<button class="btn btn--sucesso" type="button" id="btn-toggle-acesso" data-acao="liberar">Desbloquear acesso</button>{% endif %}
+    <button class="btn btn--outline" type="button" id="btn-foco-biometria">Recapturar biometria</button>
+    {% if session.get("usuario_papel") == "ADMIN" %}<a class="btn btn--outline" href="{{ url_for('pagina_avaliacoes_aluno',pessoa_id=pessoa.id) }}">Avaliações físicas</a>{% endif %}
+  </div>
+</section>
+
+<div class="profile-layout-v45">
+  <section class="form-card profile-main-form">
+    <div class="form-section-title">Dados pessoais</div>
+    <div class="form-grid">
+      <div class="field field--full"><label for="nome">Nome completo *</label><input id="nome" value="{{ pessoa.nome }}"></div>
+      <div class="field"><label for="cpf">CPF *</label><input id="cpf" maxlength="14" value="{{ pessoa.cpf or '' }}"></div>
+      <div class="field"><label for="matricula">Matrícula</label><input id="matricula" value="{{ pessoa.matricula }}" readonly></div>
+      <div class="field"><label for="data_nascimento">Data de nascimento</label><input id="data_nascimento" type="date" value="{{ pessoa.data_nascimento or '' }}"></div>
+      <div class="field"><label for="sexo">Sexo</label><select id="sexo"><option value="">Não informado</option>{% for opcao in ['Feminino','Masculino','Outro'] %}<option value="{{ opcao }}" {% if pessoa.sexo == opcao %}selected{% endif %}>{{ opcao }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="telefone">Telefone</label><input id="telefone" value="{{ pessoa.telefone or '' }}"></div>
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" value="{{ pessoa.email or '' }}"></div>
+    </div>
+
+    <div class="form-section-title">Plano e financeiro</div>
+    <div class="form-grid">
+      <div class="field"><label for="plano_id">Plano *</label><select id="plano_id">{% for plano in planos %}<option value="{{ plano.id }}" data-dias="{{ plano.duracao_dias }}" {% if pessoa.plano_id == plano.id %}selected{% endif %}>{{ plano.nome }} · {{ plano.valor_centavos|moeda }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="status_financeiro">Status financeiro</label><select id="status_financeiro"><option value="EM_DIA" {% if pessoa.status_financeiro == 'EM_DIA' %}selected{% endif %}>Em dia</option><option value="PENDENTE" {% if pessoa.status_financeiro == 'PENDENTE' %}selected{% endif %}>Pendente</option><option value="VENCIDO" {% if pessoa.status_financeiro == 'VENCIDO' %}selected{% endif %}>Vencido</option></select></div>
+      <div class="field"><label for="data_inicio">Início *</label><input id="data_inicio" type="date" value="{{ pessoa.data_inicio or '' }}"></div>
+      <div class="field"><label for="data_vencimento">Vencimento *</label><input id="data_vencimento" type="date" value="{{ pessoa.data_vencimento or '' }}"></div>
+      <div class="field field--full"><label for="observacoes">Observações</label><textarea id="observacoes" rows="4">{{ pessoa.observacoes or '' }}</textarea></div>
+    </div>
+
+    <div class="edit-access-row"><div><strong>Acesso manual</strong><span>O bloqueio manual sempre prevalece sobre plano e situação financeira.</span></div><label class="switch"><input id="liberado" type="checkbox" {% if pessoa.liberado %}checked{% endif %}><span></span></label></div>
+    <div class="button-row"><button class="btn btn--primario" id="btn-salvar" type="button">Salvar alterações</button></div>
+  </section>
+
+  <aside class="side-stack profile-side-v45">
+    <section class="panel student-detail-card">
+      <div class="panel-heading"><div><h2>Resumo</h2><p>Informações rápidas para a recepção.</p></div></div>
+      <div class="detail-grid detail-grid--profile">
+        <div><small>CPF</small><strong>{{ pessoa.cpf or '—' }}</strong></div>
+        <div><small>VENCIMENTO</small><strong>{{ pessoa.data_vencimento|data_br }}</strong></div>
+        <div><small>TELEFONE</small><strong>{{ pessoa.telefone or '—' }}</strong></div>
+        <div><small>FINANCEIRO</small><strong>{{ pessoa.status_financeiro_efetivo|replace('_',' ') }}</strong></div>
+        <div><small>CADASTRO</small><strong>{{ pessoa.data_cadastro[:10]|data_br if pessoa.data_cadastro else '—' }}</strong></div>
+        <div><small>PLANO</small><strong>{{ pessoa.plano or '—' }}</strong></div>
+      </div>
+    </section>
+
+    <section class="panel finance-card-v51">
+      <div class="panel-heading"><div><h2>Cobrança PIX</h2><p>Geração manual via Asaas Sandbox.</p></div><span class="mini-tag">ASAAS</span></div>
+      {% if cobranca_aberta %}
+      <div class="charge-current-v511"><span class="badge badge--finance-{{ cobranca_aberta.status|lower }}">{{ cobranca_aberta.status }}</span><strong>{{ cobranca_aberta.valor_centavos|moeda }}</strong><small>Vencimento {{ cobranca_aberta.vencimento_original|data_br }}</small></div>
+      {% if cobranca_aberta.pix_qr_base64 %}<div class="pix-box-v51"><img class="pix-qr-v51" alt="QR Code PIX" src="data:image/png;base64,{{ cobranca_aberta.pix_qr_base64 }}"><textarea id="pix-payload-atual" readonly>{{ cobranca_aberta.pix_payload or '' }}</textarea><button class="btn btn--outline btn--full" type="button" id="btn-copiar-pix-atual">Copiar PIX</button></div>{% endif %}
+      <div class="status-msg">Já existe uma cobrança aberta para este vencimento.</div>
+      {% elif asaas_configurado %}
+      <button class="btn btn--primario btn--full" id="btn-gerar-pix" type="button">Gerar cobrança PIX</button>
+      {% else %}
+      <div class="status-msg status-msg--erro">Configure ASAAS_API_KEY para habilitar.</div>
+      {% endif %}
+      <div id="pix-resultado"></div>
+    </section>
+
+    {% if session.get("usuario_papel") == "ADMIN" %}
+    <section class="panel student-app-access-card-v58">
+      <div class="panel-heading"><div><h2>App do aluno</h2><p>Crie ou redefina o acesso pessoal ao PWA.</p></div><span class="badge {{ 'badge--success' if acesso_app and acesso_app.ativo else 'badge--muted' }}">{{ 'ATIVO' if acesso_app and acesso_app.ativo else 'NÃO CONFIGURADO' if not acesso_app else 'INATIVO' }}</span></div>
+      <div class="field"><label for="app-login-v58">Login do aluno</label><input id="app-login-v58" value="{{ acesso_app.login if acesso_app else pessoa.matricula or '' }}" autocomplete="off"></div>
+      <div class="field"><label for="app-senha-v58">{{ 'Nova senha (deixe vazio para manter)' if acesso_app else 'Senha inicial' }}</label><input id="app-senha-v58" type="password" autocomplete="new-password" placeholder="{{ '••••••••' if acesso_app else 'mínimo 6 caracteres' }}"></div>
+      <label class="check-row-v52"><input id="app-ativo-v58" type="checkbox" {% if not acesso_app or acesso_app.ativo %}checked{% endif %}> Permitir login no app</label>
+      {% if acesso_app and acesso_app.ultimo_login %}<small class="student-app-last-v58">Último login: {{ acesso_app.ultimo_login }}</small>{% endif %}
+      <button class="btn btn--outline btn--full" id="btn-salvar-app-v58" type="button">{{ 'Atualizar acesso' if acesso_app else 'Criar acesso ao app' }}</button>
+      <div id="app-access-msg-v58"></div>
+    </section>
+    {% endif %}
+
+    <section class="panel biometric-card" id="secao-biometria">
+      <div class="panel-heading"><div><h2>Biometria facial</h2><p>Recapture as amostras quando necessário.</p></div><span id="biometria-contador" class="mini-tag">0 / 5</span></div>
+      <div class="mini-camera"><video id="bio-video" autoplay playsinline muted></video><div class="camera-hint" id="bio-hint">Centralize o rosto.</div></div>
+      <button class="btn btn--outline btn--full" id="btn-biometria" type="button">Capturar nova biometria</button><div id="bio-mensagem"></div>
+    </section>
+  </aside>
+</div>
+
+<section class="panel profile-history-panel">
+  <div class="panel-heading"><div><h2>Histórico de acessos</h2><p>Últimas tentativas registradas para este aluno.</p></div><a class="text-link" href="{{ url_for('pagina_historico', termo=pessoa.matricula) }}">Abrir histórico completo →</a></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Data e hora</th><th>Resultado</th><th>Motivo</th><th>Catraca</th></tr></thead><tbody>
+    {% for log in historico %}<tr><td class="mono">{{ log.data_hora }}</td><td><span class="badge badge--{{ log.status|lower }}">{{ log.status }}</span></td><td>{{ log.motivo or '—' }}</td><td>{{ log.catraca_nome or '—' }}</td></tr>
+    {% else %}<tr><td colspan="4" class="empty-state">Nenhum acesso registrado para este aluno.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="panel profile-history-panel">
+  <div class="panel-heading"><div><h2>Histórico financeiro</h2><p>Cobranças geradas para este aluno.</p></div></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Criada</th><th>Vencimento</th><th>Valor</th><th>Status</th><th>Pagamento</th><th>Último evento</th></tr></thead><tbody>
+  {% for c in cobrancas %}<tr><td>{{ c.data_criacao }}</td><td>{{ c.vencimento_original|data_br }}</td><td>{{ c.valor_centavos|moeda }}</td><td><span class="badge badge--finance-{{ c.status|lower }}">{{ c.status }}</span></td><td>{{ c.data_pagamento or '—' }}</td><td class="mono">{{ c.ultimo_evento or '—' }}</td></tr>{% else %}<tr><td colspan="6" class="empty-state">Nenhuma cobrança gerada.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="panel profile-history-panel">
+  <div class="panel-heading"><div><h2>Eventos financeiros</h2><p>Eventos recebidos do Asaas e resultado aplicado localmente.</p></div></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Recebido</th><th>Evento</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody>
+  {% for ev in eventos_financeiros %}<tr><td>{{ ev.data_recebimento }}</td><td class="mono">{{ ev.evento }}</td><td><span class="badge badge--finance-{{ (ev.status_resultante or 'evento')|lower }}">{{ ev.status_resultante or 'EVENTO' }}</span></td><td>{{ ev.detalhes or '—' }}</td></tr>{% else %}<tr><td colspan="4" class="empty-state">Nenhum evento financeiro recebido.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="danger-zone panel">
+  <div><div class="eyebrow">ZONA DE ATENÇÃO</div><h2>Remover aluno</h2><p>Exclui o cadastro e a biometria. O histórico de acessos é preservado.</p></div>
+  <button class="btn btn--perigo" type="button" id="btn-remover-aluno">Remover aluno</button>
+</section>
+
+<div class="confirm-modal hidden" id="perfil-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="perfil-confirm-title">
+  <div class="confirm-modal__backdrop" data-profile-modal-close></div>
+  <div class="confirm-modal__card"><div class="eyebrow">CONFIRMAÇÃO</div><h2 id="perfil-confirm-title">Confirmar ação</h2><p id="perfil-confirm-text"></p><div class="button-row"><button class="btn btn--outline" type="button" data-profile-modal-close>Cancelar</button><button class="btn btn--primario" type="button" id="perfil-confirm-action">Confirmar</button></div></div>
+</div>
+
+<canvas id="bio-canvas" style="display:none"></canvas>
+{% endblock %}
+{% block scripts %}
+<script>
+window.ALUNO_ID={{ pessoa.id }};
+window.ALUNO_NOME={{ pessoa.nome|tojson }};
+window.ALUNO_CONFIG={preparacaoCapturaMs:{{ cadastro_preparacao_captura_ms|int }},intervaloCapturaMs:{{ cadastro_intervalo_captura_ms|int }}};
+</script>
+<script src="{{ url_for('static', filename='js/aluno.js', v='5.8.0') }}"></script>
+{% endblock %}

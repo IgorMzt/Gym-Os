@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar · Panobianco Gym OS{% endblock %}
+{% block conteudo %}
+<div class="auth-shell"><div class="auth-card"><div class="eyebrow">ÁREA RESTRITA</div><h1>Entrar no Gym OS</h1><p>Entre com sua conta. Equipe e alunos usam a mesma tela; cada perfil é direcionado automaticamente para sua área.</p><form method="post" class="stack-form"><input type="hidden" name="proxima" value="{{ request.args.get('proxima', '') }}"><div><label for="usuario">Usuário ou CPF</label><input id="usuario" name="usuario" type="text" autocomplete="username" required></div><div><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="current-password" required></div>{% if request.args.get("ativado") %}<div class="status-msg status-msg--ok">Acesso ativado. Entre com seu usuário ou CPF.</div>{% endif %}{% if erro %}<div class="status-msg status-msg--erro">{{ erro }}</div>{% endif %}
+{% if bloqueio_segundos %}<div class="status-msg status-msg--aviso">Proteção contra tentativas excessivas ativa.</div>{% endif %}<button class="btn btn--primario btn--full" type="submit">Entrar no Gym OS</button></form><div class="auth-self-v591"><span>É aluno e ainda não tem acesso?</span><a href="{{ url_for('primeiro_acesso') }}">Fazer primeiro acesso →</a></div></div></div>
+{% endblock %}

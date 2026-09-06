@@ -1,0 +1,16 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}Histórico · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-page-title-v58"><small>CONSISTÊNCIA</small><h1>Meu histórico</h1><p>Seus treinos registrados.</p></section>
+{% if sessoes %}
+<section class="student-section-v58">
+{% for s in sessoes %}
+<a class="student-history-row-v58" href="{{ url_for('aluno_app_execucao',sessao_id=s.id) }}"><div><strong>{{ s.treino_nome }}</strong><span>{{ s.iniciado_em }} · {{ s.exercicios_concluidos }}/{{ s.total_exercicios }} exercícios{% if s.duracao_segundos %} · {{ (s.duracao_segundos/60)|round|int }} min{% endif %}</span></div><b class="{{ 'ok' if s.status=='CONCLUIDO' else '' }}">{{ s.status|replace('_',' ')|title }}</b></a>
+{% endfor %}
+</section>
+{% else %}<section class="student-empty-v58"><b>Seu histórico está vazio</b><span>Os treinos concluídos aparecerão aqui.</span></section>{% endif %}
+{% if cargas %}
+<section class="student-section-v58"><div class="student-section-head-v58"><div><small>REFERÊNCIA</small><h2>Últimas cargas</h2></div></div>
+<div class="student-load-grid-v58">{% for c in cargas %}<article><small>{{ c.exercicio_nome }}</small><strong>{{ c.carga_realizada }}</strong><span>{{ c.series_realizadas or '—' }} × {{ c.repeticoes_realizadas or '—' }}</span></article>{% endfor %}</div>
+</section>{% endif %}
+{% endblock %}

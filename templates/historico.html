@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Histórico · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row"><div><div class="eyebrow">MONITORAMENTO</div><h1>Histórico</h1><p>Filtre e exporte todas as tentativas registradas pelas catracas.</p></div><a class="btn btn--outline" href="{{ url_for('pagina_catraca') }}">Abrir catraca</a></div>
+<form class="panel filters" method="get">
+  <div><label for="data_inicio">De</label><input id="data_inicio" name="data_inicio" type="date" value="{{ filtros.data_inicio }}"></div>
+  <div><label for="data_fim">Até</label><input id="data_fim" name="data_fim" type="date" value="{{ filtros.data_fim }}"></div>
+  <div><label for="status">Resultado</label><select id="status" name="status"><option value="">Todos</option>{% for s in ['LIBERADO','BLOQUEADO','NEGADO'] %}<option value="{{ s }}" {% if filtros.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+  <div><label for="catraca_id">Catraca</label><select id="catraca_id" name="catraca_id"><option value="">Todas</option>{% for c in catracas %}<option value="{{ c.id }}" {% if filtros.catraca_id == c.id|string %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>
+  <div class="field--wide"><label for="termo">Aluno / CPF / Matrícula</label><input id="termo" name="termo" type="search" value="{{ filtros.termo }}" placeholder="Pesquisar..."></div>
+  <div class="filters-actions"><button class="btn btn--primario" type="submit">Filtrar</button><a class="btn btn--outline" href="{{ url_for('pagina_historico') }}">Limpar</a></div>
+</form>
+<div class="export-row"><span>{{ logs|length }} registro(s) na consulta atual</span><div><a class="btn btn--pequeno btn--outline" href="{{ url_for('exportar_historico_csv', **filtros) }}">↓ CSV</a><a class="btn btn--pequeno btn--outline" href="{{ url_for('exportar_historico_pdf', **filtros) }}">↓ PDF</a></div></div>
+<div class="panel"><div class="table-scroll"><table class="data-table"><thead><tr><th>Data / hora</th><th>Aluno</th><th>CPF</th><th>Matrícula</th><th>Resultado</th><th>Motivo</th><th>Catraca</th></tr></thead><tbody>
+{% for log in logs %}<tr><td class="mono date-local" data-utc="{{ log.data_hora }}">{{ log.data_hora }}</td><td>{{ log.nome or 'Não identificado' }}</td><td class="mono">{{ log.cpf or '—' }}</td><td class="mono">{{ log.matricula or '—' }}</td><td><span class="badge badge--{{ log.status|lower }}">{{ log.status }}</span></td><td>{{ log.motivo or '—' }}</td><td>{{ log.catraca_nome or '—' }}</td></tr>{% else %}<tr><td colspan="7" class="empty-state">Nenhum registro encontrado com esses filtros.</td></tr>{% endfor %}
+</tbody></table></div></div>
+{% endblock %}

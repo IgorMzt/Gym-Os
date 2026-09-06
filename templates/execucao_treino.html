@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block titulo %}{{ sessao.treino_nome }} · Execução{% endblock %}
+{% block page_title_top %}Execução de treino{% endblock %}
+{% block conteudo %}
+<section class="execution-session-head-v56">
+  <div>
+    <a href="{{ url_for('pagina_execucoes') }}" class="back-link-v56">← Voltar ao histórico</a>
+    <div class="eyebrow">{{ sessao.aluno_nome }}</div>
+    <h1>{{ sessao.treino_nome }}</h1>
+    <p>{{ sessao.ficha_nome }} · iniciado em {{ sessao.iniciado_em }}</p>
+  </div>
+  <div class="execution-session-status-v56">
+    <span class="badge {% if sessao.status=='CONCLUIDO' %}badge--success{% elif sessao.status=='EM_ANDAMENTO' %}badge--warning{% else %}badge--muted{% endif %}">{{ sessao.status|replace('_',' ')|title }}</span>
+    <strong id="exec-progress-label">{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }}</strong>
+    <small>exercícios concluídos</small>
+  </div>
+</section>
+
+<div class="execution-progressbar-v56"><span id="exec-progressbar" style="width:{{ sessao.progresso_percentual }}%"></span></div>
+
+<section class="execution-items-v56">
+{% for i in sessao.itens %}
+<article class="execution-item-v56 {{ 'done' if i.concluido else '' }}" data-item="{{ i.id }}">
+  <div class="execution-item-number-v56">{{ loop.index }}</div>
+  <div class="execution-item-main-v56">
+    <div class="execution-item-title-v56"><div><small>{{ i.grupo_muscular or 'Exercício' }}</small><h2>{{ i.exercicio_nome }}</h2></div>{% if i.concluido %}<span class="execution-check-v56">✓</span>{% endif %}</div>
+    <div class="execution-planned-v56">
+      <span><b>{{ i.series_planejadas or '—' }}</b> séries</span>
+      <span><b>{{ i.repeticoes_planejadas or '—' }}</b> reps</span>
+      <span><b>{{ i.carga_planejada or '—' }}</b> carga</span>
+      <span><b>{{ i.descanso_planejado or '—' }}</b> s descanso</span>
+    </div>
+    {% if i.observacoes_planejadas %}<p class="execution-plan-note-v56">{{ i.observacoes_planejadas }}</p>{% endif %}
+    <div class="execution-real-v56">
+      <label>Séries realizadas<input type="number" min="0" max="99" class="real-series" value="{{ i.series_realizadas if i.series_realizadas is not none else i.series_planejadas or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+      <label>Repetições<input class="real-reps" maxlength="80" value="{{ i.repeticoes_realizadas or i.repeticoes_planejadas or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+      <label>Carga<input class="real-load" maxlength="80" value="{{ i.carga_realizada or i.carga_planejada or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+      <label>Observação<input class="real-note" maxlength="1000" value="{{ i.observacoes_execucao or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+    </div>
+    {% if sessao.status=='EM_ANDAMENTO' %}
+    <button type="button" class="btn {{ 'btn--secundario' if i.concluido else 'btn--primario' }} toggle-done-v56">{{ 'Reabrir exercício' if i.concluido else 'Concluir exercício' }}</button>
+    {% endif %}
+  </div>
+</article>
+{% endfor %}
+</section>
+
+{% if sessao.status=='EM_ANDAMENTO' %}
+<section class="panel execution-finish-v56">
+  <div><h2>Finalizar sessão</h2><p>O treino só pode ser concluído quando todos os exercícios estiverem marcados.</p></div>
+  <textarea id="exec-final-note" rows="2" placeholder="Observação geral da sessão (opcional)"></textarea>
+  <div class="execution-finish-actions-v56"><button type="button" class="btn btn--perigo" id="exec-cancel-session">Cancelar sessão</button><button type="button" class="btn btn--primario" id="exec-finish-session" {{ 'disabled' if sessao.exercicios_concluidos != sessao.total_exercicios else '' }}>Concluir treino</button></div>
+  <div id="exec-session-msg"></div>
+</section>
+{% else %}
+<section class="panel execution-summary-v56">
+  <div><span>Status</span><strong>{{ sessao.status|replace('_',' ')|title }}</strong></div>
+  <div><span>Duração</span><strong>{{ ((sessao.duracao_segundos or 0) / 60)|round|int }} min</strong></div>
+  <div><span>Finalizado</span><strong>{{ sessao.finalizado_em or '—' }}</strong></div>
+  {% if sessao.observacoes %}<div class="execution-summary-note-v56"><span>Observação</span><strong>{{ sessao.observacoes }}</strong></div>{% endif %}
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>window.EXEC_SESSAO_ID={{ sessao.id }};</script><script src="{{ url_for('static',filename='js/execucao_treino.js',v='5.6.0') }}"></script>{% endblock %}

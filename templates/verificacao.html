@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block titulo %}Catraca · Panobianco{% endblock %}
+{% block body_class %}body-catraca{% endblock %}
+{% block conteudo %}
+<div class="turnstile-page" id="turnstile-page">
+
+  <div class="sleep-screen hidden" id="sleep-screen" aria-live="polite">
+    <div class="sleep-screen__glow"></div>
+    <div class="sleep-screen__content">
+      <img class="sleep-screen__logo" src="{{ url_for('static', filename='assets/panobianco-logo-branco.png') }}" alt="Panobianco">
+      <div class="sleep-screen__subtitle">CONTROLE DE ACESSO</div>
+      <div class="sleep-screen__clock" id="sleep-clock">--:--</div>
+      <div class="sleep-screen__date" id="sleep-date">—</div>
+      <div class="sleep-screen__prompt">APROXIME-SE PARA ENTRAR</div>
+      <div class="sleep-screen__presence"><span class="sleep-screen__dot"></span><span id="sleep-presence-text">Aguardando presença</span></div>
+      <div class="sleep-screen__device" id="sleep-device-name">{{ config_catraca.catraca.nome if config_catraca.catraca else 'Catraca de acesso' }}</div>
+    </div>
+    <div class="sleep-screen__footer">PANOBIANCO · ACESSO INTELIGENTE</div>
+  </div>
+
+  <section class="brand-hero brand-hero--catraca">
+    <div class="brand-hero__content">
+      <div class="brand-hero__eyebrow">MODO CATRACA</div>
+      <img class="brand-hero__logo" src="{{ url_for('static', filename='assets/panobianco-logo-branco.png') }}" alt="Panobianco">
+      <p>Identificação facial contínua para liberar a entrada com rapidez e segurança.</p>
+    </div>
+    <div class="brand-hero__status"><span class="live-dot"></span> SISTEMA ONLINE</div>
+  </section>
+
+  <div class="page-header page-header--row">
+    <div>
+      <div class="eyebrow">MODO CATRACA</div>
+      <h1>Identificação automática</h1>
+      <p>Uma pessoa por vez. O sistema valida o rosto, o plano e o status do aluno antes de liberar a entrada.</p>
+    </div>
+    <div class="live-pill"><span></span> SISTEMA ONLINE</div>
+  </div>
+
+  <div class="turnstile-grid">
+    <section class="camera-card">
+      <div class="camera-header"><span>CÂMERA DE ACESSO</span><span id="camera-state">Iniciando...</span></div>
+      <div class="camera-wrap camera-wrap--large" id="camera-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="camera-overlay">
+          <div class="camera-corners"></div>
+          <div class="camera-hint" id="camera-hint">Centralize o rosto</div>
+        </div>
+        <div class="standby-overlay hidden" id="standby-overlay">
+          <div class="standby-icon">◉</div>
+          <strong>DESCANSO</strong>
+          <span>Aguardando presença...</span>
+          <small>O reconhecimento facial está em repouso.</small>
+        </div>
+      </div>
+      <div class="camera-footer">
+        <span id="liveness-state">Prova de vida ativa</span>
+        <span id="operation-state">INICIANDO</span>
+      </div>
+    </section>
+
+    <section class="result-card" id="status-display" aria-live="polite">
+      <div class="state-chip" id="state-chip">INICIANDO</div>
+      <div class="result-icon" id="status-icon">•</div>
+      <div class="result-eyebrow" id="status-eyebrow">SISTEMA</div>
+      <div class="result-title" id="status-texto">Preparando câmera</div>
+      <div class="result-message" id="status-nome">Aguarde um instante</div>
+
+      <div class="gate-pulse hidden" id="gate-pulse" aria-hidden="true"><span></span></div>
+
+      <div class="person-card hidden" id="person-card">
+        <img id="status-foto" src="" alt="Foto do aluno">
+        <div>
+          <strong id="person-nome">—</strong>
+          <span id="person-cpf">CPF —</span>
+          <span id="person-matricula">Matrícula —</span>
+          <span id="person-plano">Plano —</span>
+          <span id="person-vencimento">Vencimento —</span>
+        </div>
+      </div>
+
+      <div class="result-countdown hidden" id="result-countdown">Preparando próxima leitura...</div>
+    </section>
+  </div>
+
+  <section class="panel panel--history">
+    <div class="panel-heading">
+      <div><h2>Histórico recente</h2><p>As últimas tentativas aparecem aqui automaticamente.</p></div>
+      <a class="text-link" href="{{ url_for('pagina_login', proxima='/historico') }}">Abrir histórico completo →</a>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead><tr><th>Hora</th><th>Aluno</th><th>Resultado</th><th>Motivo</th></tr></thead>
+        <tbody id="catraca-historico"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<canvas id="canvas" style="display:none"></canvas>
+{% endblock %}
+{% block scripts %}
+<script>window.CATRACA_CONFIG = {{ config_catraca|tojson }};</script>
+<script src="{{ url_for('static', filename='js/verificacao.js', v='4.4.0') }}"></script>
+{% endblock %}

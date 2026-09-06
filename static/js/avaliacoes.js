@@ -1,0 +1,3 @@
+(()=>{const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+function filtrar(){const q=($('#assessment-search-v57')?.value||'').toLowerCase().trim(),f=$('#assessment-filter-v57')?.value||'todos';$$('.assessment-student-card-v57').forEach(c=>{const total=+c.dataset.total,okq=!q||c.dataset.search.includes(q),okf=f==='todos'||(f==='avaliados'&&total>0)||(f==='pendentes'&&total===0);c.hidden=!(okq&&okf)})}
+$('#assessment-search-v57')?.addEventListener('input',filtrar);$('#assessment-filter-v57')?.addEventListener('change',filtrar)})();

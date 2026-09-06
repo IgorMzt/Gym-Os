@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block titulo %}Primeiro acesso · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="auth-shell"><div class="auth-card auth-card-wide-v591">
+<div class="eyebrow">APP DO ALUNO</div><h1>Ative seu acesso</h1>
+<p>Use os mesmos dados informados na sua matrícula. Você precisa já estar cadastrado na academia.</p>
+<form method="post" class="stack-form">
+<div class="first-access-grid-v591"><div><label>CPF</label><input name="cpf" inputmode="numeric" autocomplete="off" required placeholder="Somente números"></div>
+<div><label>Matrícula</label><input name="matricula" autocomplete="off" required maxlength="20"></div>
+<div><label>Data de nascimento</label><input name="data_nascimento" type="date" required></div></div>
+<hr class="soft-divider-v591">
+<div><label>Crie seu usuário</label><input name="login" autocomplete="username" required minlength="3" maxlength="80"></div>
+<div class="first-access-grid-v591"><div><label>Senha</label><input name="senha" type="password" autocomplete="new-password" required minlength="8"></div>
+<div><label>Confirmar senha</label><input name="confirmar_senha" type="password" autocomplete="new-password" required minlength="8"></div></div>
+{% if erro %}<div class="status-msg status-msg--erro">{{ erro }}</div>{% endif %}
+<button class="btn btn--primario btn--full">Ativar meu acesso</button>
+<a class="btn btn--secundario btn--full" href="{{ url_for('pagina_login') }}">Voltar para entrar</a>
+</form></div></div>{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários · Panobianco{% endblock %}
+{% block page_title_top %}Usuários e permissões{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52">
+  <div><div class="eyebrow">SEGURANÇA E EQUIPE</div><h1>Usuários do Gym OS</h1><p>Contas internas separadas por função. Contas de professor podem ser vinculadas aos cadastros da equipe técnica em Professores.</p></div>
+  <button class="btn btn--primario" type="button" id="novo-usuario">+ Novo usuário</button>
+</section>
+
+<section class="panel users-panel-v52">
+  <div class="users-table-wrap-v52">
+    <table class="users-table-v52">
+      <thead><tr><th>Nome</th><th>Login</th><th>Papel</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
+      <tbody id="usuarios-tbody">
+      {% for u in usuarios %}
+        <tr data-id="{{ u.id }}" data-nome="{{ u.nome|e }}" data-login="{{ u.login|e }}" data-papel="{{ u.papel }}" data-ativo="{{ 1 if u.ativo else 0 }}" data-origem="{{ u.origem }}">
+          <td><strong>{{ u.nome }}</strong>{% if u.id == session.get('usuario_id') %}<small class="self-tag-v52">Você</small>{% endif %}</td>
+          <td><code>{{ u.login }}</code></td>
+          <td><span class="role-badge-v52 role-{{ u.papel|lower }}">{{ papeis[u.papel] }}</span></td>
+          <td><span class="badge {{ 'badge--success' if u.ativo else 'badge--muted' }}">{{ 'Ativo' if u.ativo else 'Inativo' }}</span></td>
+          <td>{{ u.ultimo_login or 'Nunca' }}</td>
+          <td class="actions-v52">{% if u.origem == 'ENV' %}<span class="source-tag-v52">Bootstrap</span>{% else %}<button class="btn btn--secundario btn-editar-usuario" type="button">Editar</button>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<dialog id="usuario-dialog" class="dialog-v52">
+  <form method="dialog" id="usuario-form" class="stack-form">
+    <input type="hidden" id="usuario-id">
+    <div class="dialog-head-v52"><div><div class="eyebrow">CONTA INTERNA</div><h2 id="usuario-dialog-titulo">Novo usuário</h2></div><button type="button" class="dialog-close-v52" id="fechar-dialog">×</button></div>
+    <div><label for="usuario-nome">Nome</label><input id="usuario-nome" maxlength="100" required></div>
+    <div><label for="usuario-login">Login</label><input id="usuario-login" maxlength="40" autocomplete="off" required></div>
+    <div><label for="usuario-papel">Papel</label><select id="usuario-papel"><option value="RECEPCAO">Recepção</option><option value="PROFESSOR">Professor</option><option value="ADMIN">Administrador</option></select></div>
+    <div id="campo-senha"><label for="usuario-senha">Senha</label><input id="usuario-senha" type="password" minlength="8" autocomplete="new-password"><small>Na criação, use pelo menos 8 caracteres.</small></div>
+    <label class="check-row-v52" id="campo-ativo"><input id="usuario-ativo" type="checkbox" checked> Conta ativa</label>
+    <div id="usuario-msg"></div>
+    <div class="dialog-actions-v52"><button class="btn btn--secundario" type="button" id="cancelar-dialog">Cancelar</button><button class="btn btn--primario" type="submit">Salvar</button></div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/usuarios.js', v='5.2.0') }}"></script>{% endblock %}

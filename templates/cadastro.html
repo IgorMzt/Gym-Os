@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block titulo %}Novo aluno · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row">
+  <div><div class="eyebrow">ALUNOS</div><h1>Novo aluno</h1><p>Cadastre a ficha completa e capture cinco amostras faciais.</p></div>
+  <a class="btn btn--outline" href="{{ url_for('pagina_gerenciar') }}">Voltar aos alunos</a>
+</div>
+<div class="registration-grid">
+  <section class="camera-card">
+    <div class="camera-header"><span>CAPTURA FACIAL</span><span id="captura-contador">0 / 5</span></div>
+    <div class="camera-wrap camera-wrap--large"><video id="video" autoplay playsinline muted></video><div class="camera-overlay"><div class="camera-corners"></div><div class="camera-hint" id="camera-hint">Mantenha apenas uma pessoa no quadro</div></div></div>
+    <div class="capture-progress"><div id="capture-progress-bar"></div></div>
+    <div class="camera-footer"><span id="captura-status">Pronto para capturar</span><span>5 ângulos leves melhoram o reconhecimento.</span></div>
+  </section>
+  <section class="form-card">
+    <div class="form-section-title">Dados pessoais</div>
+    <div class="form-grid">
+      <div class="field field--full"><label for="nome">Nome completo *</label><input id="nome" type="text" placeholder="Ex.: Maria da Silva" autocomplete="name"></div>
+      <div class="field"><label for="cpf">CPF *</label><input id="cpf" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>
+      <div class="field"><label for="data_nascimento">Data de nascimento</label><input id="data_nascimento" type="date"></div>
+      <div class="field"><label for="sexo">Sexo</label><select id="sexo"><option value="">Não informado</option><option>Feminino</option><option>Masculino</option><option>Outro</option></select></div>
+      <div class="field"><label for="telefone">Telefone</label><input id="telefone" type="text" inputmode="tel" placeholder="(00) 00000-0000"></div>
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" placeholder="aluno@email.com" autocomplete="email"></div>
+    </div>
+    <div class="form-section-title">Plano e acesso</div>
+    <div class="form-grid">
+      <div class="field"><label for="matricula">Matrícula</label><input id="matricula" type="text" value="Gerada automaticamente" readonly></div>
+      <div class="field"><label for="plano_id">Plano *</label><select id="plano_id"><option value="">Selecione</option>{% for plano in planos %}<option value="{{ plano.id }}" data-dias="{{ plano.duracao_dias }}" data-valor="{{ plano.valor_centavos }}">{{ plano.nome }} · {{ plano.valor_centavos|moeda }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="data_inicio">Início *</label><input id="data_inicio" type="date" value="{{ hoje }}"></div>
+      <div class="field"><label for="data_vencimento">Vencimento *</label><input id="data_vencimento" type="date"></div>
+      <div class="field field--full"><label for="observacoes">Observações</label><textarea id="observacoes" rows="3" placeholder="Informações internas sobre o aluno"></textarea></div>
+    </div>
+    <button type="button" class="btn btn--primario btn--full" id="btn-capturar">Capturar 5 amostras</button>
+    <button type="button" class="btn btn--primario btn--full" id="btn-salvar-aluno" disabled>Salvar aluno</button>
+    <div id="mensagem"></div>
+  </section>
+</div>
+<canvas id="canvas" style="display:none"></canvas>
+{% endblock %}
+{% block scripts %}
+<script>
+window.CADASTRO_CONFIG = {
+  redirectUrl: {{ url_for('pagina_gerenciar')|tojson }},
+  preparacaoCapturaMs: {{ cadastro_preparacao_captura_ms|int }},
+  intervaloCapturaMs: {{ cadastro_intervalo_captura_ms|int }}
+};
+
+(() => {
+  const escapeHtml = (valor) => String(valor ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("canvas");
+  const btnCapturar = document.getElementById("btn-capturar");
+  const btnSalvar = document.getElementById("btn-salvar-aluno");
+  const divMensagem = document.getElementById("mensagem");
+  const contador = document.getElementById("captura-contador");
+  const barra = document.getElementById("capture-progress-bar");
+  const capturaStatus = document.getElementById("captura-status");
+  const hint = document.getElementById("camera-hint");
+  const inputCpf = document.getElementById("cpf");
+  const inputTelefone = document.getElementById("telefone");
+  const inputPlano = document.getElementById("plano_id");
+  const inputInicio = document.getElementById("data_inicio");
+  const inputVencimento = document.getElementById("data_vencimento");
+  const CFG = window.CADASTRO_CONFIG || {};
+  const PREP = Math.max(0, Number(CFG.preparacaoCapturaMs ?? 550));
+  const INTERVALO = Math.max(0, Number(CFG.intervaloCapturaMs ?? 450));
+  let imagens = [];
+
+  const mostrar = (texto, tipo) => {
+    divMensagem.innerHTML = `<div class="status-msg status-msg--${tipo}">${escapeHtml(texto)}</div>`;
+  };
+
+  const obrigatoriosOk = () =>
+    document.getElementById("nome").value.trim() &&
+    inputCpf.value && inputPlano.value && inputInicio.value && inputVencimento.value;
+
+  function formatarCpf(valor) {
+    let v = valor.replace(/\D/g, "").slice(0, 11);
+    if (v.length > 9) return v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2}).*/, "$1.$2.$3-$4");
+    if (v.length > 6) return v.replace(/(\d{3})(\d{3})(\d{1,3}).*/, "$1.$2.$3");
+    if (v.length > 3) return v.replace(/(\d{3})(\d{1,3}).*/, "$1.$2");
+    return v;
+  }
+
+  function formatarTelefone(valor) {
+    const v = valor.replace(/\D/g, "").slice(0, 11);
+    if (v.length > 10) return v.replace(/(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3");
+    if (v.length > 6) return v.replace(/(\d{2})(\d{4})(\d{0,4}).*/, "($1) $2-$3");
+    if (v.length > 2) return v.replace(/(\d{2})(\d{0,5}).*/, "($1) $2");
+    return v;
+  }
+
+  inputCpf?.addEventListener("input", () => inputCpf.value = formatarCpf(inputCpf.value));
+  inputTelefone?.addEventListener("input", () => inputTelefone.value = formatarTelefone(inputTelefone.value));
+
+  function somarDias(iso, dias) {
+    if (!iso) return "";
+    const d = new Date(`${iso}T12:00:00`);
+    d.setDate(d.getDate() + Number(dias));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function atualizarVencimento() {
+    const dias = inputPlano.selectedOptions[0]?.dataset?.dias;
+    if (dias && inputInicio.value) inputVencimento.value = somarDias(inputInicio.value, dias);
+  }
+
+  inputPlano?.addEventListener("change", atualizarVencimento);
+  inputInicio?.addEventListener("change", atualizarVencimento);
+  atualizarVencimento();
+
+  ligarCamera(video).catch(err => {
+    mostrar("Não foi possível acessar a câmera: " + err.message, "erro");
+    btnCapturar.disabled = true;
+  });
+
+  btnCapturar?.addEventListener("click", async () => {
+    if (!obrigatoriosOk()) {
+      mostrar("Preencha os campos obrigatórios antes de capturar.", "erro");
+      return;
+    }
+
+    imagens = [];
+    btnCapturar.disabled = true;
+    btnSalvar.disabled = true;
+    divMensagem.innerHTML = "";
+    barra.style.width = "0%";
+    contador.textContent = "0 / 5";
+
+    try {
+      for (let i = 1; i <= 5; i++) {
+        capturaStatus.textContent = `Preparando captura ${i}...`;
+        hint.textContent = i === 1 ? "Centralize o rosto" : "Mova levemente a cabeça";
+        await dormir(PREP);
+        imagens.push(capturarFrame(video, canvas, 0.74));
+        contador.textContent = `${i} / 5`;
+        barra.style.width = `${i * 20}%`;
+        capturaStatus.textContent = `Captura ${i} de 5 registrada`;
+        await dormir(INTERVALO);
+      }
+
+      capturaStatus.textContent = "Capturas prontas";
+      hint.textContent = "Agora clique em Salvar aluno";
+      btnSalvar.disabled = false;
+      mostrar("5 amostras capturadas. Clique em Salvar aluno para concluir.", "sucesso");
+    } catch (erro) {
+      imagens = [];
+      contador.textContent = "0 / 5";
+      barra.style.width = "0%";
+      mostrar(erro.message || "Falha ao capturar as imagens.", "erro");
+    } finally {
+      btnCapturar.disabled = false;
+    }
+  });
+
+  btnSalvar?.addEventListener("click", async () => {
+    if (imagens.length !== 5) {
+      mostrar("Capture as 5 amostras antes de salvar.", "erro");
+      return;
+    }
+
+    const payload = {
+      nome: document.getElementById("nome").value.trim(),
+      cpf: inputCpf.value,
+      data_nascimento: document.getElementById("data_nascimento").value,
+      sexo: document.getElementById("sexo").value,
+      telefone: inputTelefone.value,
+      email: document.getElementById("email").value,
+      plano_id: inputPlano.value,
+      data_inicio: inputInicio.value,
+      data_vencimento: inputVencimento.value,
+      observacoes: document.getElementById("observacoes").value,
+      imagens
+    };
+
+    btnSalvar.disabled = true;
+    btnCapturar.disabled = true;
+    btnSalvar.textContent = "Salvando...";
+    capturaStatus.textContent = "Salvando aluno...";
+
+    try {
+      const resp = await fetch("/api/cadastrar", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload),
+        cache: "no-store"
+      });
+
+      const dados = await resp.json().catch(() => ({}));
+      if (!resp.ok || !dados.sucesso) {
+        throw new Error(dados.erro || `Erro HTTP ${resp.status}`);
+      }
+
+      mostrar("Aluno cadastrado com sucesso. Abrindo Alunos...", "sucesso");
+      try { desligarCamera(video); } catch (_) {}
+      window.location.assign(dados.redirect_url || CFG.redirectUrl || "/gerenciar");
+    } catch (erro) {
+      console.error(erro);
+      mostrar(erro.message || "Não foi possível salvar o aluno.", "erro");
+      btnSalvar.disabled = false;
+      btnCapturar.disabled = false;
+      btnSalvar.textContent = "Salvar aluno";
+      capturaStatus.textContent = "Tente salvar novamente";
+    }
+  });
+})();
+</script>
+{% endblock %}

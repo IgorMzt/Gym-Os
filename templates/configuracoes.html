@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block titulo %}Configurações · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row"><div><div class="eyebrow">SISTEMA</div><h1>Configurações</h1><p>Ajuste a operação da catraca sem editar o código-fonte.</p></div></div>
+<div class="settings-layout">
+<section class="panel"><div class="panel-heading"><div><h2>Catraca e reconhecimento</h2><p>Parâmetros aplicados imediatamente na próxima leitura.</p></div></div>
+<div class="settings-form">
+  <div class="field"><label for="tema_padrao">Tema padrão</label><select id="tema_padrao"><option value="light" {% if configuracoes.tema_padrao=='light' %}selected{% endif %}>Claro</option><option value="dark" {% if configuracoes.tema_padrao=='dark' %}selected{% endif %}>Escuro</option><option value="system" {% if configuracoes.tema_padrao in ['system',None] %}selected{% endif %}>Sistema</option></select></div>
+  <div class="field"><label for="tempo_resultado_ms">Tempo da mensagem (ms)</label><input id="tempo_resultado_ms" type="number" min="1500" max="10000" value="{{ configuracoes.tempo_resultado_ms }}"></div>
+  <div class="field"><label for="intervalo_reconhecimento_ms">Intervalo de reconhecimento (ms)</label><input id="intervalo_reconhecimento_ms" type="number" min="500" max="5000" step="50" value="{{ configuracoes.intervalo_reconhecimento_ms or '850' }}"><small>Controla a frequência das leituras; independente do anti-repetição de logs.</small></div>
+  <div class="field"><label for="presenca_modo">Modo da câmera</label><select id="presenca_modo"><option value="sempre" {% if configuracoes.presenca_modo=='sempre' %}selected{% endif %}>Sempre ativa</option><option value="inteligente" {% if configuracoes.presenca_modo in ['inteligente',None] %}selected{% endif %}>Presença inteligente</option><option value="sensor" {% if configuracoes.presenca_modo=='sensor' %}selected{% endif %}>Sensor externo (futuro)</option></select><small>No modo inteligente, a webcam fica disponível localmente, mas o reconhecimento entra em repouso quando não há atividade.</small></div>
+  <div class="field"><label for="standby_sem_presenca_ms">Entrar em standby após (ms)</label><input id="standby_sem_presenca_ms" type="number" min="5000" max="300000" step="1000" value="{{ configuracoes.standby_sem_presenca_ms or '30000' }}"><small>Tempo sem uso até o reconhecimento entrar em descanso. Ex.: 30000 = 30 segundos.</small></div>
+  <div class="field"><label for="atraso_apos_presenca_ms">Atraso após detectar presença (ms)</label><input id="atraso_apos_presenca_ms" type="number" min="0" max="5000" step="100" value="{{ configuracoes.atraso_apos_presenca_ms or '700' }}"></div>
+  <div class="field"><label for="cooldown_proxima_pessoa_ms">Cooldown entre pessoas (ms)</label><input id="cooldown_proxima_pessoa_ms" type="number" min="0" max="60000" step="250" value="{{ configuracoes.cooldown_proxima_pessoa_ms or '1000' }}"><small>Pode ser 0 para não adicionar espera artificial.</small></div>
+  <div class="field"><label for="ausencia_rearmar_ms">Ausência necessária para rearmar (ms)</label><input id="ausencia_rearmar_ms" type="number" min="0" max="30000" step="100" value="{{ configuracoes.ausencia_rearmar_ms or '1200' }}"><small>Quanto tempo a área precisa ficar sem rosto. Use 0 para rearmar assim que a saída for confirmada.</small></div>
+  <div class="field"><label for="max_espera_saida_ms">Espera máxima pela saída (ms)</label><input id="max_espera_saida_ms" type="number" min="0" max="120000" step="500" value="{{ configuracoes.max_espera_saida_ms or '0' }}"><small>0 = sem limite automático. Se definir um valor, a leitura rearma ao atingir esse tempo.</small></div>
+  <div class="field"><label for="cadastro_redirect_ms">Tempo após cadastrar aluno (ms)</label><input id="cadastro_redirect_ms" type="number" min="0" max="30000" step="500" value="{{ configuracoes.cadastro_redirect_ms or '3000' }}"><small>Tempo da mensagem de sucesso antes de voltar para Alunos.</small></div>
+  <div class="field"><label for="cadastro_preparacao_captura_ms">Preparação antes de cada captura (ms)</label><input id="cadastro_preparacao_captura_ms" type="number" min="0" max="5000" step="50" value="{{ configuracoes.cadastro_preparacao_captura_ms or '550' }}"></div>
+  <div class="field"><label for="cadastro_intervalo_captura_ms">Intervalo entre capturas faciais (ms)</label><input id="cadastro_intervalo_captura_ms" type="number" min="0" max="5000" step="50" value="{{ configuracoes.cadastro_intervalo_captura_ms or '450' }}"></div>
+  <div class="field"><label for="erro_recuperacao_ms">Recuperação após erro (ms)</label><input id="erro_recuperacao_ms" type="number" min="500" max="30000" step="500" value="{{ configuracoes.erro_recuperacao_ms or '2500' }}"></div>
+  <div class="field"><label for="intervalo_detector_presenca_ms">Intervalo do detector de presença (ms)</label><input id="intervalo_detector_presenca_ms" type="number" min="100" max="5000" step="100" value="{{ configuracoes.intervalo_detector_presenca_ms or '500' }}"></div>
+  <div class="field"><label for="intervalo_historico_ms">Atualizar histórico da catraca a cada (ms)</label><input id="intervalo_historico_ms" type="number" min="1000" max="60000" step="500" value="{{ configuracoes.intervalo_historico_ms or '5000' }}"></div>
+  <div class="field"><label for="sensibilidade_presenca">Sensibilidade de presença</label><select id="sensibilidade_presenca"><option value="baixa" {% if configuracoes.sensibilidade_presenca=='baixa' %}selected{% endif %}>Baixa</option><option value="media" {% if configuracoes.sensibilidade_presenca in ['media',None] %}selected{% endif %}>Média</option><option value="alta" {% if configuracoes.sensibilidade_presenca=='alta' %}selected{% endif %}>Alta</option></select></div>
+  <div class="field"><label for="limiar_reconhecimento">Limiar facial</label><input id="limiar_reconhecimento" type="number" min="0.3" max="0.8" step="0.01" value="{{ configuracoes.limiar_reconhecimento }}"></div>
+  <div class="field"><label for="intervalo_log">Intervalo anti-repetição (s)</label><input id="intervalo_log" type="number" min="2" max="30" value="{{ configuracoes.intervalo_log }}"></div>
+  <div class="field"><label for="liveness_janela_segundos">Janela da prova de vida (s)</label><input id="liveness_janela_segundos" type="number" min="2" max="10" value="{{ configuracoes.liveness_janela_segundos }}"></div>
+
+  <div class="field"><label for="dias_alerta_vencimento">Alerta de vencimento (dias)</label><input id="dias_alerta_vencimento" type="number" min="1" max="60" value="{{ configuracoes.dias_alerta_vencimento or '7' }}"><small>Define quando um aluno entra no filtro “Vencendo”.</small></div>
+  <div class="field"><label for="quantidade_amostras">Amostras por aluno</label><input id="quantidade_amostras" type="number" min="3" max="5" value="{{ configuracoes.quantidade_amostras }}"></div>
+  <div class="setting-toggle"><div><strong>Prova de vida</strong><span>Exige movimento antes de reconhecer.</span></div><label class="switch"><input id="liveness_ativo" type="checkbox" {% if configuracoes.liveness_ativo in ['1','true','True'] %}checked{% endif %}><span></span></label></div>
+  <div class="setting-toggle"><div><strong>Sons da catraca</strong><span>Confirmação sonora para liberado ou negado.</span></div><label class="switch"><input id="som_ativo" type="checkbox" {% if configuracoes.som_ativo in ['1','true','True'] %}checked{% endif %}><span></span></label></div>
+  <div class="field field--full"><label for="catraca_padrao_id">Catraca padrão</label><select id="catraca_padrao_id">{% for catraca in catracas %}<option value="{{ catraca.id }}" {% if configuracoes.catraca_padrao_id == catraca.id|string %}selected{% endif %}>{{ catraca.nome }} · {{ catraca.modo }}</option>{% endfor %}</select></div>
+</div>
+<button type="button" class="btn btn--primario" id="btn-salvar-config">Salvar configurações</button><div id="config-mensagem"></div>
+</section>
+<section class="panel"><div class="panel-heading"><div><h2>Dispositivos</h2><p>Arquitetura pronta para múltiplas catracas.</p></div></div><div class="device-list">{% for catraca in catracas %}<div class="device-row"><div class="device-status"></div><div><strong>{{ catraca.nome }}</strong><small>{{ catraca.local or 'Local não informado' }} · modo {{ catraca.modo }}</small></div><div class="device-actions"><span class="mini-tag">{{ 'ATIVA' if catraca.ativa else 'INATIVA' }}</span>{% if catraca.ativa %}<button type="button" class="btn btn--pequeno btn--outline" data-test-catraca="{{ catraca.id }}">Testar</button>{% endif %}</div></div>{% endfor %}</div><div class="divider"></div><h3>Adicionar catraca</h3><div class="form-grid"><div class="field field--full"><label for="cat-nome">Nome</label><input id="cat-nome" placeholder="Catraca 02 - Entrada"></div><div class="field"><label for="cat-local">Local</label><input id="cat-local" placeholder="Entrada lateral"></div><div class="field"><label for="cat-modo">Modo</label><select id="cat-modo"><option value="SIMULADA">Simulada</option><option value="HTTP">HTTP (futuro)</option><option value="SERIAL">Serial (futuro)</option></select></div></div><button type="button" class="btn btn--outline btn--full" id="btn-add-catraca">Adicionar dispositivo</button><div id="cat-mensagem"></div></section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const escapeHtml = (valor) => String(valor ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+  const btn = document.getElementById("btn-salvar-config");
+  const msg = document.getElementById("config-mensagem");
+
+  const idsValor = [
+    "tema_padrao","tempo_resultado_ms","intervalo_reconhecimento_ms",
+    "presenca_modo","standby_sem_presenca_ms","atraso_apos_presenca_ms",
+    "cooldown_proxima_pessoa_ms","ausencia_rearmar_ms","max_espera_saida_ms",
+    "cadastro_redirect_ms","cadastro_preparacao_captura_ms",
+    "cadastro_intervalo_captura_ms","erro_recuperacao_ms",
+    "intervalo_detector_presenca_ms","intervalo_historico_ms",
+    "sensibilidade_presenca","limiar_reconhecimento","intervalo_log",
+    "liveness_janela_segundos","quantidade_amostras","dias_alerta_vencimento","catraca_padrao_id"
+  ];
+
+  const mostrar = (texto, tipo="sucesso") => {
+    if (msg) msg.innerHTML = `<div class="status-msg status-msg--${tipo}">${escapeHtml(texto)}</div>`;
+  };
+
+  btn?.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    const payload = {};
+
+    for (const id of idsValor) {
+      const el = document.getElementById(id);
+      if (el && el.value !== "") payload[id] = el.value;
+    }
+
+    for (const id of ["liveness_ativo","som_ativo"]) {
+      const el = document.getElementById(id);
+      if (el) payload[id] = el.checked ? "1" : "0";
+    }
+
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Salvando...";
+    mostrar("Salvando alterações...", "info");
+
+    try {
+      const resp = await fetch("/api/configuracoes", {
+        method: "PUT",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+        cache: "no-store"
+      });
+
+      const dados = await resp.json().catch(() => ({}));
+      if (!resp.ok || !dados.sucesso) {
+        throw new Error(dados.erro || `Erro HTTP ${resp.status}`);
+      }
+
+      mostrar("Configurações salvas com sucesso.", "sucesso");
+      window.setTimeout(() => window.location.reload(), 500);
+    } catch (erro) {
+      console.error(erro);
+      mostrar(erro.message || "Não foi possível salvar as configurações.", "erro");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
+  document.getElementById("btn-add-catraca")?.addEventListener("click", async () => {
+    const valor = id => document.getElementById(id)?.value || "";
+    const catMsg = document.getElementById("cat-mensagem");
+    try {
+      const resp = await fetch("/api/catracas", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({nome: valor("cat-nome"), local: valor("cat-local"), modo: valor("cat-modo")})
+      });
+      const dados = await resp.json().catch(() => ({}));
+      if (!resp.ok || !dados.sucesso) throw new Error(dados.erro || "Falha ao adicionar dispositivo.");
+      window.location.reload();
+    } catch (erro) {
+      if (catMsg) catMsg.innerHTML = `<div class="status-msg status-msg--erro">${escapeHtml(erro.message || "Erro")}</div>`;
+    }
+  });
+
+  document.querySelectorAll("[data-test-catraca]").forEach(btnTeste => {
+    btnTeste.addEventListener("click", async () => {
+      const original = btnTeste.textContent;
+      btnTeste.disabled = true;
+      btnTeste.textContent = "Testando...";
+      try {
+        const resp = await fetch(`/api/catracas/${btnTeste.dataset.testCatraca}/testar`, {method:"POST"});
+        const dados = await resp.json().catch(() => ({}));
+        if (!resp.ok || !dados.sucesso) throw new Error(dados.erro || "Falha no teste.");
+        mostrar(dados.mensagem || "Catraca testada.", "sucesso");
+      } catch (erro) {
+        mostrar(erro.message || "Erro no teste.", "erro");
+      } finally {
+        btnTeste.disabled = false;
+        btnTeste.textContent = original;
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

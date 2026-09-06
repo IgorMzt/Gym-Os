@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block titulo %}Minha área · Panobianco{% endblock %}
+{% block page_title_top %}Minha área{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52"><div><div class="eyebrow">PROFESSOR</div><h1>{{ professor.nome if professor else 'Minha área' }}</h1><p>Gerencie sua carteira de alunos sem depender da administração.</p></div></section>
+{% if not professor %}
+<section class="panel empty-state-v53">Seu usuário ainda não está vinculado a um cadastro de professor. O administrador precisa fazer apenas essa configuração inicial.</section>
+{% else %}
+<section class="prof-self-kpis-v551">
+<article class="panel"><span>Meus alunos</span><strong>{{ metricas.total }}</strong></article>
+<article class="panel"><span>Sem ficha</span><strong>{{ metricas.sem_ficha }}</strong></article>
+<article class="panel"><span>Sem avaliação +60d</span><strong>{{ metricas.sem_avaliacao_60 }}</strong></article>
+<article class="panel"><span>Treinando agora</span><strong>{{ metricas.treinando }}</strong></article>
+</section>
+<section class="panel prof-self-panel-v551">
+<div class="prof-tabs-v551"><button type="button" class="ativo" data-tab="meus">Meus alunos <b>{{ alunos|length }}</b></button><button type="button" data-tab="disponiveis">Alunos disponíveis <b>{{ disponiveis|length }}</b></button></div>
+<div class="prof-tab-v551 ativo" id="tab-meus">
+<div class="prof-tab-toolbar-v551"><input id="buscar-meus-v551" placeholder="Buscar nos meus alunos..."></div>
+<div class="prof-student-grid-v551">
+{% for aluno in alunos %}
+<article class="prof-student-card-v551" data-search="{{ aluno.nome|lower|e }}">
+<div class="prof-student-avatar-v551">{% if aluno.foto_path %}<img src="{{ url_for('static',filename=aluno.foto_path) }}" alt="">{% else %}<span>{{ aluno.nome[:1]|upper }}</span>{% endif %}</div>
+<div class="prof-student-info-v551"><small>MEU ALUNO</small><h3>{{ aluno.nome }}</h3><span>{{ aluno.plano or 'Sem plano informado' }}</span><small>Última atividade: {{ aluno.ultimo_acesso or 'Sem registro' }}</small></div>
+<div class="prof-student-actions-v551"><a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_aluno_professor',pessoa_id=aluno.id) }}">Perfil</a><a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_treinos') }}">Treinos</a><button type="button" class="link-danger-v53 liberar-aluno-v551" data-id="{{ aluno.id }}" data-nome="{{ aluno.nome|e }}">Liberar</button></div>
+</article>
+{% else %}<div class="empty-state-v53">Você ainda não assumiu nenhum aluno.</div>{% endfor %}
+</div></div>
+<div class="prof-tab-v551" id="tab-disponiveis">
+<div class="prof-availability-note-v551"><strong>Fila de alunos sem professor</strong><span>Ao assumir, o aluno fica exclusivo na sua carteira até você liberá-lo.</span></div>
+<div class="prof-tab-toolbar-v551"><input id="buscar-disponiveis-v551" placeholder="Buscar aluno disponível..."></div>
+<div class="prof-student-grid-v551">
+{% for aluno in disponiveis %}
+<article class="prof-student-card-v551 prof-student-card-v551--available" data-search="{{ aluno.nome|lower|e }}">
+<div class="prof-student-avatar-v551">{% if aluno.foto_path %}<img src="{{ url_for('static',filename=aluno.foto_path) }}" alt="">{% else %}<span>{{ aluno.nome[:1]|upper }}</span>{% endif %}</div>
+<div class="prof-student-info-v551"><small>DISPONÍVEL</small><h3>{{ aluno.nome }}</h3><span>{{ aluno.plano or 'Sem plano informado' }}</span><small>Última atividade: {{ aluno.ultimo_acesso or 'Sem registro' }}</small></div>
+<div class="prof-student-actions-v551"><button type="button" class="btn btn--primario btn--mini assumir-aluno-v551" data-id="{{ aluno.id }}" data-nome="{{ aluno.nome|e }}">Assumir aluno</button></div>
+</article>
+{% else %}<div class="empty-state-v53">Não há alunos disponíveis neste momento.</div>{% endfor %}
+</div></div>
+</section>
+<dialog id="prof-action-dialog-v551" class="dialog-v52 prof-confirm-v551"><div class="dialog-head-v52"><div><div class="eyebrow">CONFIRMAÇÃO</div><h2 id="prof-action-title-v551">Confirmar</h2></div><button type="button" class="dialog-close-v52" id="prof-action-close-v551">×</button></div><p id="prof-action-text-v551"></p><div id="prof-action-msg-v551"></div><div class="dialog-actions-v52"><button class="btn btn--secundario" id="prof-action-cancel-v551" type="button">Cancelar</button><button class="btn btn--primario" id="prof-action-confirm-v551" type="button">Confirmar</button></div></dialog>
+{% endif %}{% endblock %}
+{% block scripts %}{% if professor %}<script src="{{ url_for('static',filename='js/minha_area_v551.js',v='5.5.1') }}"></script>{% endif %}{% endblock %}

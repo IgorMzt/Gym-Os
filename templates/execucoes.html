@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titulo %}Execuções · Panobianco{% endblock %}
+{% block page_title_top %}Execuções de treino{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52 execution-head-v56">
+  <div><div class="eyebrow">TREINO REAL</div><h1>Execuções e histórico</h1><p>Inicie treinos, acompanhe sessões em andamento e consulte o histórico realizado.</p></div>
+</section>
+<section class="exercise-kpis-v54">
+  <article class="panel"><span>Em andamento</span><strong>{{ estatisticas.em_andamento }}</strong></article>
+  <article class="panel"><span>Concluídos</span><strong>{{ estatisticas.concluidos }}</strong></article>
+  <article class="panel"><span>Últimos 30 dias</span><strong>{{ estatisticas.ultimos_30_dias }}</strong></article>
+  <article class="panel"><span>Duração média</span><strong>{{ estatisticas.duracao_media_min }}<small> min</small></strong></article>
+</section>
+
+<section class="panel execution-start-v56">
+  <div><div class="eyebrow">NOVA SESSÃO</div><h2>Iniciar treino</h2></div>
+  {% if disponiveis %}
+  <div class="execution-start-controls-v56">
+    <select id="exec-treino-select">
+      <option value="">Selecione aluno e treino...</option>
+      {% for t in disponiveis %}
+      <option value="{{ t.treino_id }}" data-pessoa="{{ t.pessoa_id }}">{{ t.aluno_nome }} · {{ t.treino_nome }} · {{ t.total_exercicios }} exercícios</option>
+      {% endfor %}
+    </select>
+    <button type="button" class="btn btn--primario" id="exec-start">Iniciar</button>
+  </div>
+  {% else %}<div class="empty-state-v53">Nenhum treino ativo disponível para execução.</div>{% endif %}
+  <div id="exec-start-msg"></div>
+</section>
+
+<section class="panel execution-history-v56">
+  <div class="execution-history-head-v56"><div><div class="eyebrow">HISTÓRICO</div><h2>Sessões</h2></div><input id="exec-search" placeholder="Buscar aluno ou treino..."></div>
+  <div class="execution-list-v56">
+  {% for s in sessoes %}
+    <article class="execution-row-v56" data-search="{{ (s.aluno_nome ~ ' ' ~ s.treino_nome ~ ' ' ~ s.ficha_nome)|lower|e }}">
+      <div><small>{{ s.aluno_nome }}</small><h3>{{ s.treino_nome }}</h3><span>{{ s.ficha_nome }}</span></div>
+      <div class="execution-progress-mini-v56"><b>{{ s.exercicios_concluidos }}/{{ s.total_exercicios }}</b><span>exercícios</span></div>
+      <div><span class="badge {% if s.status=='CONCLUIDO' %}badge--success{% elif s.status=='EM_ANDAMENTO' %}badge--warning{% else %}badge--muted{% endif %}">{{ s.status|replace('_',' ')|title }}</span></div>
+      <div class="execution-date-v56">{{ s.iniciado_em }}</div>
+      <a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_execucao',sessao_id=s.id) }}">{{ 'Continuar' if s.status=='EM_ANDAMENTO' else 'Detalhes' }}</a>
+    </article>
+  {% else %}<div class="empty-state-v53">Nenhuma sessão de treino registrada.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/execucoes.js',v='5.6.0') }}"></script>{% endblock %}

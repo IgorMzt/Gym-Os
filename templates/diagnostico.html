@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titulo %}Diagnóstico · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row">
+  <div><div class="eyebrow">DIAGNÓSTICO · SEGURANÇA</div><h1>Diagnóstico e segurança</h1><p>Integridade do banco, backup, restauração e auditoria administrativa.</p></div>
+  <a class="btn btn--primario" href="{{ url_for('baixar_backup') }}">Baixar backup agora</a>
+</div>
+
+<div class="stats-grid">
+  <article class="stat-card"><span>Banco de dados</span><strong>{{ 'OK' if integridade.ok else 'ATENÇÃO' }}</strong><small>PRAGMA quick_check: {{ integridade.quick_check }}</small></article>
+  <article class="stat-card"><span>Schema</span><strong>v{{ integridade.schema_version }}</strong><small>Versão interna do banco</small></article>
+  <article class="stat-card"><span>Chaves estrangeiras</span><strong>{{ integridade.foreign_keys }}</strong><small>inconsistências encontradas</small></article>
+  <article class="stat-card"><span>Credencial padrão</span><strong>{{ 'ATIVA' if credencial_padrao else 'OK' }}</strong><small>{{ 'Troque antes da produção' if credencial_padrao else 'Senha externa configurada' }}</small></article>
+</div>
+
+<section class="panel">
+  <div class="panel-heading"><div><h2>Backup e recuperação</h2><p>A restauração valida o arquivo e cria um snapshot do banco atual antes de substituir os dados.</p></div></div>
+  <form id="form-restaurar" class="stack-form" enctype="multipart/form-data">
+    <div><label for="backup">Arquivo de backup (.db)</label><input id="backup" name="backup" type="file" accept=".db" required></div>
+    <div class="danger-zone"><strong>Atenção</strong><p>Restaurar um backup substitui os dados atuais pelos dados contidos no arquivo.</p><button class="btn btn--perigo" type="submit">Validar e restaurar backup</button></div>
+    <div id="restore-msg" class="status-msg hidden"></div>
+  </form>
+</section>
+
+<section class="panel panel--history">
+  <div class="panel-heading"><div><h2>Auditoria administrativa</h2><p>Últimas ações sensíveis registradas pelo sistema.</p></div></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Data</th><th>Ação</th><th>Alvo</th><th>Detalhes</th><th>IP</th></tr></thead><tbody>
+  {% for log in logs_admin %}
+  <tr><td class="mono">{{ log.data_hora }}</td><td><span class="badge">{{ log.acao }}</span></td><td>{{ log.alvo or '—' }}</td><td>{{ log.detalhes or '—' }}</td><td class="mono">{{ log.ip or '—' }}</td></tr>
+  {% else %}<tr><td colspan="5">Nenhum evento administrativo registrado ainda.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("form-restaurar")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!confirm("Restaurar este backup? Os dados atuais serão substituídos.")) return;
+  const msg = document.getElementById("restore-msg");
+  msg.className = "status-msg";
+  msg.textContent = "Validando e restaurando...";
+  try {
+    const r = await fetch("/restaurar-backup", {method:"POST", body:new FormData(e.currentTarget), cache:"no-store"});
+    const d = await r.json();
+    msg.className = "status-msg " + (r.ok ? "status-msg--sucesso" : "status-msg--erro");
+    msg.textContent = d.mensagem || d.erro || "Operação concluída.";
+    if (r.ok) setTimeout(() => location.reload(), 900);
+  } catch (_) {
+    msg.className = "status-msg status-msg--erro";
+    msg.textContent = "Não foi possível restaurar o backup.";
+  }
+});
+</script>
+{% endblock %}

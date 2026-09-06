@@ -1,0 +1,21 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}Perfil · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-profile-v58">
+<div class="student-profile-photo-v58">{% if pessoa.foto_path %}<img src="{{ url_for('static',filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+<h1>{{ pessoa.nome }}</h1><p>Matrícula {{ pessoa.matricula or '—' }}</p>
+</section>
+<section class="student-section-v58">
+<div class="student-info-row-v58"><span>Plano</span><strong>{{ pessoa.plano or '—' }}</strong></div>
+<div class="student-info-row-v58"><span>Vencimento</span><strong>{{ pessoa.data_vencimento|data_br if pessoa.data_vencimento else '—' }}</strong></div>
+<div class="student-info-row-v58"><span>Status de acesso</span><strong>{{ pessoa.status_operacional }}</strong></div>
+<div class="student-info-row-v58"><span>Professor</span><strong>{{ professor.professor_nome if professor else 'Não definido' }}</strong></div>
+<div class="student-info-row-v58"><span>E-mail</span><strong>{{ pessoa.email or '—' }}</strong></div>
+<div class="student-info-row-v58"><span>Telefone</span><strong>{{ pessoa.telefone or '—' }}</strong></div>
+</section>
+<a class="student-profile-link-v591" href="{{ url_for('aluno_app_financeiro') }}"><span><small>MENSALIDADE</small><strong>Financeiro</strong></span><b>Ver situação →</b></a>
+<section class="student-section-v58"><div class="student-section-head-v58"><div><small>SEGURANÇA</small><h2>Alterar senha</h2></div></div>
+<form id="student-password-v591" class="student-password-v591"><input id="pwd-current-v591" type="password" placeholder="Senha atual" required><input id="pwd-new-v591" type="password" placeholder="Nova senha (mín. 8 caracteres)" minlength="8" required><button class="student-secondary-v58">Atualizar senha</button></form></section>
+<section class="student-app-install-v58"><div><small>ATALHO NO CELULAR</small><h2>Instalar Panobianco</h2><p>Adicione o app à tela inicial para abrir como um aplicativo.</p></div><button id="student-install-v58" class="student-secondary-v58" hidden>Instalar app</button></section>
+<a href="{{ url_for('logout') }}" class="student-logout-full-v58">Sair da minha conta</a>
+{% endblock %}{% block scripts %}<script>document.getElementById('student-password-v591')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.currentTarget.querySelector('button');b.disabled=true;try{const r=await window.studentFetch('/api/app/senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({senha_atual:document.getElementById('pwd-current-v591').value,nova_senha:document.getElementById('pwd-new-v591').value})}),d=await r.json();if(!r.ok||!d.sucesso)throw new Error(d.erro||'Não foi possível alterar.');e.currentTarget.reset();window.studentToast('Senha atualizada.')}catch(x){window.studentToast(x.message)}finally{b.disabled=false}})</script>{% endblock %}

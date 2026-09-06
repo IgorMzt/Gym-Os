@@ -1,0 +1,6 @@
+(()=>{const money=c=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((c||0)/100);
+async function copyPix(){const el=document.getElementById('pix-code-v59');if(!el||!el.value)return;try{await navigator.clipboard.writeText(el.value);window.studentToast('Código PIX copiado.')}catch{el.select();document.execCommand('copy');window.studentToast('Código PIX copiado.')}}
+document.getElementById('copy-pix-v59')?.addEventListener('click',copyPix);
+document.getElementById('generate-pix-v59')?.addEventListener('click',async()=>{const b=document.getElementById('generate-pix-v59');b.disabled=true;b.textContent='Gerando PIX...';try{const r=await window.studentFetch('/api/app/financeiro/pix',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),d=await r.json().catch(()=>({}));if(!r.ok||!d.sucesso)throw new Error(d.erro||'Não foi possível gerar o PIX.');location.reload()}catch(e){window.studentToast(e.message);b.disabled=false;b.textContent='Gerar PIX'}});
+let last=null;async function refreshStatus(){try{const r=await fetch('/api/app/financeiro/status',{cache:'no-store'}),d=await r.json();if(!d.sucesso)return;const sig=JSON.stringify([d.status_financeiro_efetivo,d.cobranca?.status,d.cobranca?.id]);if(last!==null&&sig!==last){location.reload();return}last=sig}catch{}}
+refreshStatus();setInterval(refreshStatus,10000)})();

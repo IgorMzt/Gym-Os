@@ -1,0 +1,30 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}{{ sessao.treino_nome }} · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-exec-head-v58"><a href="{{ url_for('aluno_app_treino') }}">← Meu treino</a><small>{{ sessao.ficha_nome }}</small><h1>{{ sessao.treino_nome }}</h1><p id="student-exec-progress-v58">{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }} exercícios</p></section>
+<div class="student-progress-v58"><span id="student-exec-bar-v58" style="width:{{ sessao.progresso_percentual }}%"></span></div>
+<div class="student-exec-list-v58">
+{% for i in sessao.itens %}
+<article class="student-exec-item-v58 {{ 'done' if i.concluido else '' }}" data-item="{{ i.id }}">
+  <div class="student-exec-item-title-v58"><b>{{ loop.index }}</b><div><small>{{ i.grupo_muscular or 'EXERCÍCIO' }}</small><h2>{{ i.exercicio_nome }}</h2></div><span class="student-exec-check-v58">{{ '✓' if i.concluido else '' }}</span></div>
+  <div class="student-plan-pills-v58"><span>{{ i.series_planejadas or '—' }} séries</span><span>{{ i.repeticoes_planejadas or '—' }} reps</span><span>{{ i.carga_planejada or 'Livre' }}</span><span>{{ i.descanso_planejado or '—' }}s</span></div>
+  {% if i.ultima_execucao %}<a class="student-last-load-v591" href="{{ url_for('aluno_app_exercicio',exercicio_id=i.exercicio_id) }}"><small>ÚLTIMO TREINO</small><strong>{{ i.ultima_execucao.carga_realizada or 'Sem carga' }} · {{ i.ultima_execucao.repeticoes_realizadas or '—' }} reps</strong><span>Ver evolução →</span></a>{% endif %}
+{% if i.observacoes_planejadas %}<div class="student-coach-note-v591"><small>ORIENTAÇÃO DO PROFESSOR</small><p>{{ i.observacoes_planejadas }}</p></div>{% endif %}
+  <div class="student-real-grid-v58">
+    <label>Séries<input type="number" min="0" max="99" class="real-series" value="{{ i.series_realizadas if i.series_realizadas is not none else i.series_planejadas or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+    <label>Repetições<input class="real-reps" value="{{ i.repeticoes_realizadas or i.repeticoes_planejadas or '' }}" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+    <label>Carga<input class="real-load" value="{{ i.carga_realizada or i.carga_planejada or '' }}" placeholder="Ex.: 30 kg" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+  </div>
+  <label class="student-note-v58">Observação<input class="real-note" value="{{ i.observacoes_execucao or '' }}" placeholder="Opcional" {{ 'disabled' if sessao.status!='EM_ANDAMENTO' else '' }}></label>
+  {% if sessao.status=='EM_ANDAMENTO' %}<button class="student-done-btn-v58 toggle-student-ex-v58" type="button">{{ 'Reabrir exercício' if i.concluido else 'Concluir exercício' }}</button>{% endif %}
+</article>
+{% endfor %}
+</div>
+{% if sessao.status=='EM_ANDAMENTO' %}
+<section class="student-finish-v58"><h2>Finalizar treino</h2><textarea id="student-final-note-v58" rows="2" placeholder="Como foi o treino hoje? (opcional)"></textarea><button id="student-finish-v58" class="student-primary-v58" {{ 'disabled' if sessao.exercicios_concluidos != sessao.total_exercicios else '' }}>Concluir treino</button><button id="student-cancel-v58" class="student-danger-link-v58">Cancelar sessão</button></section>
+{% else %}
+<section class="student-complete-v58"><b>{{ 'Treino concluído ✓' if sessao.status=='CONCLUIDO' else 'Sessão cancelada' }}</b><span>{% if sessao.duracao_segundos %}Duração aproximada: {{ ((sessao.duracao_segundos or 0)/60)|round|int }} min{% endif %}</span><a href="{{ url_for('aluno_app_historico') }}">Ver histórico</a></section>
+{% endif %}
+<dialog id="rest-dialog-v591" class="student-rest-dialog-v591"><small>DESCANSO</small><strong id="rest-time-v591">01:00</strong><div><button id="rest-plus-v591">+15s</button><button id="rest-skip-v591">Pular</button></div></dialog>
+{% endblock %}
+{% block scripts %}<script>window.STUDENT_SESSION_ID={{ sessao.id }};</script><script src="{{ url_for('static',filename='js/aluno_app_execucao.js',v='5.9.1') }}"></script>{% endblock %}

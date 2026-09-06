@@ -1,0 +1,25 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}Meu treino · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-page-title-v58"><small>MINHA ROTINA</small><h1>Meu treino</h1><p>{% if ficha %}{{ ficha.nome }}{% else %}Nenhuma ficha ativa{% endif %}</p></section>
+{% if sessao %}
+<a href="{{ url_for('aluno_app_execucao',sessao_id=sessao.id) }}" class="student-resume-v58"><div><small>EM ANDAMENTO</small><strong>{{ sessao.treino_nome }}</strong><span>{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }} concluídos</span></div><b>Continuar →</b></a>
+{% endif %}
+{% if ficha %}
+<div class="student-workout-list-v58">
+{% for t in ficha.treinos %}
+<article class="student-workout-card-v58">
+  <div class="student-workout-card-head-v58"><div><small>TREINO {{ loop.index }}</small><h2>{{ t.nome }}</h2></div><span>{{ t.exercicios|length }} exercícios</span></div>
+  {% if t.observacoes %}<p>{{ t.observacoes }}</p>{% endif %}
+  <div class="student-workout-exercises-v58">
+  {% for e in t.exercicios %}
+    <div><b>{{ loop.index }}</b><span><strong>{{ e.exercicio_nome }}</strong><small>{{ e.series or '—' }} séries · {{ e.repeticoes or '—' }} reps{% if e.carga %} · {{ e.carga }}{% endif %}</small></span></div>
+  {% endfor %}
+  </div>
+  {% if not sessao %}<button class="student-primary-v58 start-workout-v58" data-treino="{{ t.id }}" type="button">Iniciar {{ t.nome }}</button>{% endif %}
+</article>
+{% endfor %}
+</div>
+{% else %}<section class="student-empty-v58"><b>Nenhum treino disponível</b><span>Quando seu professor criar uma ficha ativa, ela aparecerá aqui.</span></section>{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/aluno_app_treino.js',v='5.8.0') }}"></script>{% endblock %}

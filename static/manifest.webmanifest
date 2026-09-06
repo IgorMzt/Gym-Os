@@ -1,0 +1,18 @@
+{
+  "name": "Panobianco Meu App",
+  "short_name": "Panobianco",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ef",
+  "theme_color": "#111111",
+  "description": "Treinos, evolução e financeiro do aluno Panobianco.",
+  "icons": [
+    {
+      "src": "/static/assets/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

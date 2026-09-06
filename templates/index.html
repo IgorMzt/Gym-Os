@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block titulo %}Dashboard · Panobianco Gym OS{% endblock %}
+{% block page_title_top %}Dashboard executivo{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_v5.css', v='5.1.1') }}">
+{% endblock %}
+{% block conteudo %}
+<div class="v5-dashboard" id="v5-dashboard" data-refresh="{{ dash.atualizacao_ms }}">
+  <section class="v5-hero">
+    <div>
+      <div class="eyebrow">PANOBIANCO GYM OS</div>
+      <h1>Visão executiva da unidade</h1>
+      <p>Movimento, alunos, alertas e operação da catraca com atualização automática.</p>
+    </div>
+    <div class="v5-hero__actions">
+      <span class="live-data-chip"><i></i>Dados ao vivo</span>
+      <a class="btn btn--primario" href="{{ url_for('pagina_cadastro') }}">+ Novo aluno</a>
+    </div>
+  </section>
+
+  <section class="v5-kpis" aria-label="Indicadores da unidade">
+    <article class="v5-kpi v5-kpi--orange">
+      <div class="v5-kpi__icon">◎</div><span>Alunos ativos</span>
+      <strong data-kpi="alunos_ativos">{{ dash.kpis.alunos_ativos }}</strong>
+      <small><b data-kpi="total_alunos">{{ dash.kpis.total_alunos }}</b> cadastrados</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">◉</div><span>Presença estimada</span>
+      <strong data-kpi="presenca_estimada">{{ dash.kpis.presenca_estimada }}</strong>
+      <small>últimos {{ dash.janela_presenca_minutos }} min · sem sensor de saída</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">⇥</div><span>Entradas hoje</span>
+      <strong data-kpi="entradas_hoje">{{ dash.kpis.entradas_hoje }}</strong>
+      <small><b data-kpi="ultima_hora">{{ dash.kpis.ultima_hora }}</b> na última hora</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">◷</div><span>Planos vencendo</span>
+      <strong data-kpi="vencendo">{{ dash.kpis.vencendo }}</strong>
+      <small>janela configurada de alerta</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">!</div><span>Inadimplentes</span>
+      <strong data-kpi="inadimplentes">{{ dash.kpis.inadimplentes }}</strong>
+      <small>pendentes ou vencidos</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">×</div><span>Bloqueados</span>
+      <strong data-kpi="bloqueados">{{ dash.kpis.bloqueados }}</strong>
+      <small>bloqueio manual</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">＋</div><span>Novos hoje</span>
+      <strong data-kpi="novos_hoje">{{ dash.kpis.novos_hoje }}</strong>
+      <small>cadastros realizados hoje</small>
+    </article>
+    <article class="v5-kpi">
+      <div class="v5-kpi__icon">↺</div><span>Recusas hoje</span>
+      <strong data-kpi="recusas_hoje">{{ dash.kpis.recusas_hoje }}</strong>
+      <small>bloqueados + não reconhecidos</small>
+    </article>
+  </section>
+
+  <div class="v5-main-grid">
+    <section class="v5-panel v5-chart-panel">
+      <div class="v5-panel__heading">
+        <div><span class="eyebrow">MOVIMENTO</span><h2>Entradas por horário</h2><p>Apenas acessos realmente liberados hoje.</p></div>
+        <div class="v5-peak"><small>PICO DE HOJE</small><strong id="pico-hora">{{ dash.pico.hora }}</strong><span><b id="pico-qtd">{{ dash.pico.quantidade }}</b> entradas</span></div>
+      </div>
+      <div class="v5-chart" id="v5-chart">
+        {% set maximo = dash.chart|map(attribute='quantidade')|max if dash.chart else 0 %}
+        {% for p in dash.chart %}
+        <div class="v5-chart__col" title="{{ p.rotulo }} · {{ p.quantidade }} entrada(s)">
+          <div class="v5-chart__value">{{ p.quantidade if p.quantidade else '' }}</div>
+          <div class="v5-chart__track"><div class="v5-chart__bar" style="height:{{ ((p.quantidade / maximo * 100) if maximo else 2)|round(1) }}%"></div></div>
+          <span>{{ p.rotulo if p.hora % 3 == 0 else '' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="v5-chart__footer">
+        <span><strong data-kpi="tentativas_hoje">{{ dash.kpis.tentativas_hoje }}</strong> tentativas registradas</span>
+        <span>Atualização automática <i id="refresh-indicator"></i></span>
+      </div>
+    </section>
+
+    <section class="v5-panel">
+      <div class="v5-panel__heading">
+        <div><span class="eyebrow">ATENÇÃO DA RECEPÇÃO</span><h2>Alertas inteligentes</h2><p>Prioridades geradas pelos dados atuais.</p></div>
+        <a href="{{ url_for('pagina_gerenciar') }}" class="text-link">Ver alunos →</a>
+      </div>
+      <div class="v5-alerts" id="v5-alerts">
+        {% for a in dash.alertas %}
+        {% if a.pessoa_id %}
+        <a class="v5-alert v5-alert--{{ a.nivel }}" href="{{ url_for('pagina_aluno', pessoa_id=a.pessoa_id) }}">
+          <i></i><div><strong>{{ a.titulo }}</strong><span>{{ a.texto }}</span></div><b>›</b>
+        </a>
+        {% else %}
+        <div class="v5-alert v5-alert--{{ a.nivel }}">
+          <i></i><div><strong>{{ a.titulo }}</strong><span>{{ a.texto }}</span></div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="v5-empty">Nenhum alerta prioritário neste momento.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <div class="v5-secondary-grid">
+    <section class="v5-panel">
+      <div class="v5-panel__heading">
+        <div><span class="eyebrow">PRESENÇA RECENTE</span><h2>Quem acessou recentemente</h2><p>Estimativa de presença: não substitui um sensor físico de saída.</p></div>
+        <span class="mini-tag">{{ dash.janela_presenca_minutos }} MIN</span>
+      </div>
+      <div class="v5-presence-list" id="v5-presence-list">
+        {% for p in dash.presenca %}
+        {% if p.pessoa_id %}
+        <a class="v5-person" href="{{ url_for('pagina_aluno', pessoa_id=p.pessoa_id) }}">
+          <div class="v5-avatar">
+            {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">{% else %}<span>{{ (p.nome or '?')[:1]|upper }}</span>{% endif %}
+          </div>
+          <div class="v5-person__main"><strong>{{ p.nome }}</strong><span>{{ p.plano or 'Sem plano' }} · {{ p.catraca_nome or 'Catraca' }}</span></div>
+          <time class="date-local" data-utc="{{ p.data_hora }}">{{ p.data_hora }}</time>
+        </a>
+        {% else %}
+        <div class="v5-person">
+          <div class="v5-avatar"><span>{{ (p.nome or '?')[:1]|upper }}</span></div>
+          <div class="v5-person__main"><strong>{{ p.nome or 'Aluno removido' }}</strong><span>{{ p.catraca_nome or 'Catraca' }} · histórico preservado</span></div>
+          <time class="date-local" data-utc="{{ p.data_hora }}">{{ p.data_hora }}</time>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="v5-empty">Nenhum acesso liberado dentro da janela atual.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="v5-panel">
+      <div class="v5-panel__heading">
+        <div><span class="eyebrow">TEMPO REAL</span><h2>Fluxo da unidade</h2><p>Últimas decisões do controle de acesso.</p></div>
+        <a href="{{ url_for('pagina_historico') }}" class="text-link">Histórico →</a>
+      </div>
+      <div class="v5-feed" id="v5-feed">
+        {% for log in dash.feed %}
+        <div class="v5-feed__item">
+          <span class="v5-feed__status v5-feed__status--{{ log.status|lower }}">{{ '✓' if log.status == 'LIBERADO' else '×' }}</span>
+          <div><strong>{{ log.nome or 'Pessoa não identificada' }}</strong><span>{{ log.motivo or log.status }} · {{ log.catraca_nome or 'Catraca' }}</span></div>
+          <time class="date-local" data-utc="{{ log.data_hora }}">{{ log.data_hora }}</time>
+        </div>
+        {% else %}<div class="v5-empty">Nenhuma movimentação registrada.</div>{% endfor %}
+      </div>
+    </section>
+
+    <section class="v5-panel">
+      <div class="v5-panel__heading">
+        <div><span class="eyebrow">INFRAESTRUTURA</span><h2>Catracas</h2><p>Configuração e último evento registrado.</p></div>
+        <a href="{{ url_for('pagina_configuracoes') }}" class="text-link">Configurar →</a>
+      </div>
+      <div class="v5-devices" id="v5-devices">
+        {% for c in dash.catracas %}
+        <div class="v5-device">
+          <div class="v5-device__status {{ 'is-active' if c.ativa else '' }}"><i></i>{{ 'ATIVA' if c.ativa else 'INATIVA' }}</div>
+          <strong>{{ c.nome }}</strong>
+          <span>{{ c.local or 'Local não definido' }} · {{ c.modo }}</span>
+          <small>{% if c.ultimo_evento %}Último evento: <span class="date-local" data-utc="{{ c.ultimo_evento }}">{{ c.ultimo_evento }}</span>{% else %}Sem eventos registrados{% endif %}</small>
+        </div>
+        {% else %}<div class="v5-empty">Nenhuma catraca configurada.</div>{% endfor %}
+      </div>
+
+      <div class="v5-finance-preview v5-finance-live" id="v5-finance">
+        <div class="v5-finance-head"><div><span class="eyebrow">FINANCEIRO · ASAAS</span><strong>Recebimentos reais</strong><p>Valores consolidados pelas cobranças registradas no sistema.</p></div><span class="v5-live-badge">ATIVO</span></div>
+        <div class="v5-finance-kpis">
+          <div><small>HOJE</small><strong data-finance="receita_hoje_centavos">{{ dash.financeiro.receita_hoje_centavos|moeda }}</strong></div>
+          <div><small>NO MÊS</small><strong data-finance="receita_mes_centavos">{{ dash.financeiro.receita_mes_centavos|moeda }}</strong></div>
+          <div><small>A RECEBER</small><strong data-finance="a_receber_centavos">{{ dash.financeiro.a_receber_centavos|moeda }}</strong></div>
+          <div><small>VENCIDAS</small><strong data-finance="cobrancas_vencidas" data-money="0">{{ dash.financeiro.cobrancas_vencidas }}</strong></div>
+        </div>
+        <div class="v5-finance-recent" id="v5-finance-recent">
+          {% for pg in dash.financeiro.pagamentos_recentes %}
+            {% if pg.pessoa_id %}
+            <a href="{{ url_for('pagina_aluno', pessoa_id=pg.pessoa_id) }}"><span><strong>{{ pg.nome or 'Aluno' }}</strong><small>{{ pg.data_pagamento }}</small></span><b>{{ pg.valor_centavos|moeda }}</b></a>
+            {% else %}
+            <div class="v5-finance-history-row"><span><strong>{{ pg.nome or 'Aluno removido' }}</strong><small>{{ pg.data_pagamento }} · histórico preservado</small></span><b>{{ pg.valor_centavos|moeda }}</b></div>
+            {% endif %}
+          {% else %}<div class="v5-empty">Nenhum pagamento confirmado ainda.</div>{% endfor %}
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.DASHBOARD_V5 = {{ dash|tojson }};</script>
+<script src="{{ url_for('static', filename='js/dashboard_v5.js', v='5.3.1') }}"></script>
+{% endblock %}

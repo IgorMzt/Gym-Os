@@ -1,0 +1,17 @@
+# Dependencias base para Python 3.11 / Windows x64.
+# IMPORTANTE: face-recognition e instalado separadamente com --no-deps pelo
+# install_windows.ps1, pois o pip nao reconhece dlib-bin como provedor de dlib.
+Flask>=3.0,<4
+python-dotenv>=1.0,<2
+blinker>=1.9
+click>=8.1
+itsdangerous>=2.2
+Jinja2>=3.1
+MarkupSafe>=2.1
+Werkzeug>=3.1
+numpy==1.26.4
+opencv-python>=4.8,<5
+Pillow>=10,<12
+reportlab>=4,<5
+dlib-bin==20.0.1
+face-recognition-models==0.3.0

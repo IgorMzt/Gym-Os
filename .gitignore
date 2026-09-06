@@ -1,0 +1,34 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime data / personal data
+perfis.db
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.bak
+backups/
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Logs and generated files
+*.log
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

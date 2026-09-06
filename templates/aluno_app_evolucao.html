@@ -1,0 +1,19 @@
+{% extends "aluno_app_base.html" %}
+{% block titulo %}Evolução · Panobianco{% endblock %}
+{% block conteudo %}
+<section class="student-page-title-v58"><small>PROGRESSO</small><h1>Minha evolução</h1><p>Acompanhe suas avaliações físicas ao longo do tempo.</p></section>
+{% if avaliacoes %}
+{% set atual=avaliacoes[0] %}
+<section class="student-evo-hero-v58"><div><small>ÚLTIMA AVALIAÇÃO · {{ atual.data_avaliacao|data_br }}</small><strong>{{ '%.1f'|format(atual.peso_kg) if atual.peso_kg is not none else '—' }}<span> kg</span></strong><p>Peso atual registrado</p></div><div><span>Gordura</span><b>{{ '%.1f'|format(atual.gordura_percentual) ~ '%' if atual.gordura_percentual is not none else '—' }}</b></div><div><span>Massa magra</span><b>{{ '%.1f'|format(atual.massa_magra_kg) ~ ' kg' if atual.massa_magra_kg is not none else '—' }}</b></div></section>
+<section class="student-evo-grid-v58">
+{% for key,label,unit in [('peso_kg','Peso','kg'),('gordura_percentual','Gordura','%'),('massa_magra_kg','Massa magra','kg'),('cintura_cm','Cintura','cm')] %}
+<article><div><small>{{ label|upper }}</small>{% set c=comparacao.get(key,{}) %}<strong>{{ '%.1f'|format(c.atual) ~ ' ' ~ unit if c.atual is not none else '—' }}</strong>{% if c.delta is not none %}<span>{{ '+' if c.delta>0 else '' }}{{ '%.1f'|format(c.delta) }} {{ unit }} desde a anterior</span>{% endif %}</div><canvas data-evo-chart="{{ key }}" data-unit="{{ unit }}"></canvas></article>
+{% endfor %}
+</section>
+<section class="student-section-v58"><div class="student-section-head-v58"><div><small>AVALIAÇÕES</small><h2>Linha do tempo</h2></div></div>
+{% for a in avaliacoes %}<div class="student-evo-row-v58"><div><strong>{{ a.data_avaliacao|data_br }}</strong><span>{{ a.professor_nome or 'Equipe Panobianco' }}</span></div><div><b>{{ '%.1f'|format(a.peso_kg) ~ ' kg' if a.peso_kg is not none else '—' }}</b><span>{{ '%.1f'|format(a.gordura_percentual) ~ '%' if a.gordura_percentual is not none else '—' }}</span></div></div>{% endfor %}
+</section>
+<script id="student-evo-data-v58" type="application/json">{{ avaliacoes|tojson }}</script>
+{% else %}<section class="student-empty-v58"><b>Sem avaliações ainda</b><span>Quando seu professor registrar sua avaliação física, sua evolução aparecerá aqui.</span></section>{% endif %}
+{% endblock %}
+{% block scripts %}{% if avaliacoes %}<script src="{{ url_for('static',filename='js/aluno_app_evolucao.js',v='5.8.0') }}"></script>{% endif %}{% endblock %}

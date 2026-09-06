@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titulo %}Avaliações físicas · Panobianco{% endblock %}
+{% block page_title_top %}Avaliações físicas{% endblock %}
+{% block conteudo %}
+<section class="page-head-v52"><div><div class="eyebrow">EVOLUÇÃO</div><h1>Avaliações físicas</h1><p>Acompanhe composição corporal, medidas e histórico de evolução dos alunos.</p></div></section>
+<section class="exercise-kpis-v54">
+  <article class="panel"><span>Avaliações</span><strong>{{ estatisticas.avaliacoes }}</strong></article>
+  <article class="panel"><span>Alunos avaliados</span><strong>{{ estatisticas.alunos_avaliados }}</strong></article>
+  <article class="panel"><span>Últimos 30 dias</span><strong>{{ estatisticas.ultimos_30_dias }}</strong></article>
+  <article class="panel"><span>Sem avaliação</span><strong>{{ estatisticas.alunos_sem_avaliacao }}</strong></article>
+</section>
+<section class="panel assessment-list-panel-v57">
+  <div class="assessment-toolbar-v57"><input id="assessment-search-v57" placeholder="Buscar aluno ou matrícula..."><select id="assessment-filter-v57"><option value="todos">Todos</option><option value="avaliados">Já avaliados</option><option value="pendentes">Sem avaliação</option></select></div>
+  <div class="assessment-student-grid-v57">
+  {% for a in alunos %}
+    <article class="assessment-student-card-v57" data-search="{{ (a.nome ~ ' ' ~ (a.matricula or ''))|lower|e }}" data-total="{{ a.total_avaliacoes }}">
+      <div class="assessment-student-avatar-v57">{% if a.foto_path %}<img src="{{ url_for('static',filename=a.foto_path) }}" alt="">{% else %}<span>{{ a.nome[:1]|upper }}</span>{% endif %}</div>
+      <div class="assessment-student-info-v57"><small>{{ a.matricula or 'SEM MATRÍCULA' }}</small><h3>{{ a.nome }}</h3><span>{% if a.ultima_avaliacao %}Última: {{ a.ultima_avaliacao }}{% else %}Nunca avaliado{% endif %}</span></div>
+      <div class="assessment-student-metrics-v57"><div><small>PESO</small><strong>{{ ('%.1f'|format(a.ultimo_peso)) ~ ' kg' if a.ultimo_peso is not none else '—' }}</strong></div><div><small>GORDURA</small><strong>{{ ('%.1f'|format(a.ultima_gordura)) ~ '%' if a.ultima_gordura is not none else '—' }}</strong></div></div>
+      <a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_avaliacoes_aluno',pessoa_id=a.id) }}">{{ 'Abrir evolução' if a.total_avaliacoes else 'Avaliar' }}</a>
+    </article>
+  {% else %}<div class="empty-state-v53">Nenhum aluno disponível.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static',filename='js/avaliacoes.js',v='5.7.0') }}"></script>{% endblock %}

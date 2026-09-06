@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block titulo %}{{ pessoa.nome }} · Avaliações{% endblock %}
+{% block page_title_top %}Evolução física{% endblock %}
+{% block conteudo %}
+<section class="assessment-profile-head-v57">
+  <div class="assessment-profile-person-v57">
+    <div class="assessment-profile-avatar-v57">{% if pessoa.foto_path %}<img src="{{ url_for('static',filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+    <div><a href="{{ url_for('pagina_avaliacoes') }}" class="back-link-v56">← Avaliações</a><div class="eyebrow">{{ pessoa.matricula or 'ALUNO' }}</div><h1>{{ pessoa.nome }}</h1><p>{{ avaliacoes|length }} avaliação(ões) registrada(s)</p></div>
+  </div>
+  <button class="btn btn--primario" id="nova-avaliacao-v57" type="button">+ Nova avaliação</button>
+</section>
+
+{% if avaliacoes %}
+<section class="assessment-summary-grid-v57">
+  {% set itens=[('peso_kg','Peso','kg'),('gordura_percentual','Gordura','%'),('massa_magra_kg','Massa magra','kg'),('cintura_cm','Cintura','cm'),('braco_cm','Braço','cm'),('coxa_cm','Coxa','cm')] %}
+  {% for key,label,unidade in itens %}
+  {% set c=comparacao.get(key,{}) %}
+  <article class="panel assessment-delta-v57"><span>{{ label }}</span><strong>{{ ('%.1f'|format(c.atual)) ~ ' ' ~ unidade if c.atual is not none else '—' }}</strong>{% if c.delta is not none %}<small class="{{ 'delta-up-v57' if c.delta>0 else 'delta-down-v57' if c.delta<0 else '' }}">{{ '+' if c.delta>0 else '' }}{{ '%.1f'|format(c.delta) }} {{ unidade }} desde a anterior</small>{% else %}<small>Sem comparação anterior</small>{% endif %}</article>
+  {% endfor %}
+</section>
+
+<section class="assessment-charts-v57">
+  <article class="panel assessment-chart-card-v57"><div><div class="eyebrow">HISTÓRICO</div><h2>Peso</h2></div><canvas data-assessment-chart="peso_kg" data-unit="kg"></canvas></article>
+  <article class="panel assessment-chart-card-v57"><div><div class="eyebrow">COMPOSIÇÃO</div><h2>Gordura corporal</h2></div><canvas data-assessment-chart="gordura_percentual" data-unit="%"></canvas></article>
+  <article class="panel assessment-chart-card-v57"><div><div class="eyebrow">COMPOSIÇÃO</div><h2>Massa magra</h2></div><canvas data-assessment-chart="massa_magra_kg" data-unit="kg"></canvas></article>
+  <article class="panel assessment-chart-card-v57"><div><div class="eyebrow">MEDIDAS</div><h2>Cintura</h2></div><canvas data-assessment-chart="cintura_cm" data-unit="cm"></canvas></article>
+</section>
+{% else %}
+<section class="panel assessment-first-v57"><div class="eyebrow">PRIMEIRA AVALIAÇÃO</div><h2>Comece a linha de evolução deste aluno</h2><p>Depois da segunda avaliação, comparações e gráficos passam a mostrar as mudanças ao longo do tempo.</p><button class="btn btn--primario" type="button" data-open-assessment>Registrar primeira avaliação</button></section>
+{% endif %}
+
+<section class="panel assessment-history-v57">
+  <div class="panel-heading"><div><h2>Histórico de avaliações</h2><p>Registros anteriores permanecem disponíveis para comparação.</p></div></div>
+  <div class="assessment-history-list-v57">
+  {% for a in avaliacoes %}
+    <article class="assessment-history-item-v57">
+      <div><small>{{ a.data_avaliacao }}</small><h3>{{ a.professor_nome or 'Equipe Panobianco' }}</h3></div>
+      <div class="assessment-history-metrics-v57"><span><b>{{ '%.1f'|format(a.peso_kg) if a.peso_kg is not none else '—' }}</b> kg</span><span><b>{{ '%.1f'|format(a.gordura_percentual) if a.gordura_percentual is not none else '—' }}</b> % gordura</span><span><b>{{ '%.1f'|format(a.cintura_cm) if a.cintura_cm is not none else '—' }}</b> cm cintura</span></div>
+      <button type="button" class="btn btn--secundario btn--mini editar-avaliacao-v57" data-id="{{ a.id }}">Abrir</button>
+    </article>
+  {% else %}<div class="empty-state-v53">Nenhuma avaliação registrada.</div>{% endfor %}
+  </div>
+</section>
+
+<dialog id="assessment-dialog-v57" class="dialog-v52 assessment-dialog-v57">
+<form id="assessment-form-v57">
+  <div class="dialog-head-v52"><div><div class="eyebrow">AVALIAÇÃO FÍSICA</div><h2 id="assessment-dialog-title-v57">Nova avaliação</h2></div><button class="dialog-close-v52" id="assessment-close-v57" type="button">×</button></div>
+  <input type="hidden" id="assessment-id-v57">
+  <div class="assessment-section-title-v57">Dados e composição</div>
+  <div class="form-grid assessment-form-grid-v57">
+    <div><label>Data *</label><input type="date" id="av-data" required></div>
+    <div><label>Peso (kg)</label><input type="number" step="0.1" id="av-peso"></div>
+    <div><label>Altura (cm)</label><input type="number" step="0.1" id="av-altura"></div>
+    <div><label>Gordura corporal (%)</label><input type="number" step="0.1" id="av-gordura"></div>
+    <div class="assessment-calculated-v57"><small>IMC calculado</small><strong id="av-imc-preview">—</strong></div>
+    <div class="assessment-calculated-v57"><small>Massa magra</small><strong id="av-magra-preview">—</strong></div>
+  </div>
+  <div class="assessment-section-title-v57">Medidas corporais (cm)</div>
+  <div class="assessment-measure-grid-v57">
+    {% for id,label in [('braco','Braço'),('antebraco','Antebraço'),('torax','Peito / tórax'),('cintura','Cintura'),('abdomen','Abdômen'),('quadril','Quadril'),('coxa','Coxa'),('panturrilha','Panturrilha')] %}
+    <label>{{ label }}<input type="number" step="0.1" id="av-{{ id }}"></label>
+    {% endfor %}
+  </div>
+  <div class="assessment-section-title-v57">Fotos de evolução</div>
+  <div class="assessment-photo-grid-v57">
+    {% for key,label in [('frontal','Frontal'),('lateral','Lateral'),('costas','Costas')] %}
+    <label class="assessment-photo-input-v57"><span>{{ label }}</span><div class="assessment-photo-preview-v57" id="preview-{{ key }}"><b>+</b><small>Adicionar foto</small></div><input type="file" accept="image/*" data-photo="{{ key }}" hidden><button type="button" class="assessment-photo-remove-v57" data-remove-photo="{{ key }}" hidden>Remover</button></label>
+    {% endfor %}
+  </div>
+  <div><label>Observações</label><textarea id="av-observacoes" rows="3" maxlength="3000"></textarea></div>
+  <div id="assessment-msg-v57"></div>
+  <div class="dialog-actions-v52"><button type="button" class="btn btn--secundario" id="assessment-cancel-v57">Cancelar</button><button type="submit" class="btn btn--primario" id="assessment-save-v57">Salvar avaliação</button></div>
+</form>
+</dialog>
+
+<script id="assessment-data-v57" type="application/json">{{ avaliacoes|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script>window.AVALIACAO_ALUNO_ID={{ pessoa.id }};</script><script src="{{ url_for('static',filename='js/avaliacoes_aluno.js',v='5.7.0') }}"></script>{% endblock %}

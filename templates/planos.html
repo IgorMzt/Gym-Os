@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block titulo %}Planos · Panobianco{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row"><div><div class="eyebrow">COMERCIAL</div><h1>Planos</h1><p>Gerencie valores e duração usados no cadastro, renovação e validação de acesso.</p></div></div>
+<div class="plans-layout">
+  <section class="panel"><div class="panel-heading"><div><h2>Planos cadastrados</h2><p>Desative um plano sem apagar o histórico nem os alunos vinculados.</p></div></div><div class="plan-list">
+  {% for plano in planos %}
+  <article class="plan-card">
+    <div class="plan-card-top"><span class="mini-tag">{{ plano.duracao_dias }} dias</span><span class="finance-pill {{ 'finance--em_dia' if plano.ativo else 'finance--vencido' }}">{{ 'ATIVO' if plano.ativo else 'INATIVO' }}</span></div>
+    <h2>{{ plano.nome }}</h2><div class="plan-price">{{ plano.valor_centavos|moeda }}</div><p>{{ plano.descricao or 'Sem descrição.' }}</p>
+    <div class="plan-actions"><button class="btn btn--pequeno btn--outline" data-editar-plano='{{ plano|tojson }}' data-plan-id='{{ plano.id }}'>Editar</button>{% if plano.ativo %}<button class="btn btn--pequeno btn--perigo" data-toggle-plano="{{ plano.id }}">Desativar</button>{% else %}<button class="btn btn--pequeno btn--sucesso" data-toggle-plano="{{ plano.id }}">Ativar</button>{% endif %}</div>
+  </article>
+  {% endfor %}
+  </div></section>
+  <section class="panel" id="form-plano"><div class="panel-heading"><div><h2 id="form-plano-titulo">Novo plano</h2><p>Crie ou edite um período comercial.</p></div><button class="btn btn--pequeno btn--outline hidden" id="btn-cancelar-edicao" type="button">Cancelar</button></div>
+    <input id="plano-id" type="hidden">
+    <div class="form-grid"><div class="field field--full"><label for="plano-nome">Nome</label><input id="plano-nome" placeholder="Ex.: Black"></div><div class="field"><label for="plano-valor">Valor (R$)</label><input id="plano-valor" inputmode="decimal" placeholder="119,90"></div><div class="field"><label for="plano-dias">Duração em dias</label><input id="plano-dias" type="number" min="1" value="30"></div><div class="field field--full"><label for="plano-desc">Descrição</label><textarea id="plano-desc" rows="3" placeholder="O que este plano oferece?"></textarea></div><div class="setting-toggle"><div><strong>Plano ativo</strong><span>Pode ser escolhido em novos cadastros.</span></div><label class="switch"><input id="plano-ativo" type="checkbox" checked><span></span></label></div></div>
+    <button class="btn btn--primario btn--full" id="btn-salvar-plano">Cadastrar plano</button><div id="plano-mensagem"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/planos.js') }}"></script>{% endblock %}
