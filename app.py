@@ -47,6 +47,7 @@ from routes.treinos import treinos_bp
 from routes.exercicios import exercicios_bp
 from routes.usuarios import usuarios_bp
 from routes.operacoes import operacoes_bp
+from routes.api import api_auth_bp, api_aluno_bp
 from routes.common import ADMIN_USER, ADMIN_PASSWORD, CREDENCIAL_PADRAO
 from validators import cpf_apenas_digitos, cpf_valido, data_iso, email_valido, parse_bool, parse_float, parse_int
 
@@ -97,6 +98,8 @@ def protecoes_globais():
     # A catraca pública precisa continuar POSTando para APIs operacionais.
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
+    if request.path.startswith("/api/v1/"):
+        return None
     if request.endpoint in {"auth.pagina_login", "operacoes.api_verificar", "operacoes.api_presenca", "operacoes.webhook_asaas"}:
         return None
     if session.get("usuario_logado") and not _csrf_valido():
@@ -112,7 +115,7 @@ def cabecalhos_seguranca(response):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
-    if request.path.startswith("/admin/") or session.get("usuario_logado"):
+    if request.path.startswith("/api/v1/") or request.path.startswith("/admin/") or session.get("usuario_logado"):
         response.headers.setdefault("Cache-Control", "no-store")
     return response
 
@@ -159,6 +162,8 @@ app.register_blueprint(treinos_bp)
 app.register_blueprint(exercicios_bp)
 app.register_blueprint(usuarios_bp)
 app.register_blueprint(operacoes_bp)
+app.register_blueprint(api_auth_bp)
+app.register_blueprint(api_aluno_bp)
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0").strip().lower() in {"1", "true", "sim", "on"}

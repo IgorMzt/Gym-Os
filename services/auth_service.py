@@ -20,15 +20,9 @@ def garantir_admin_bootstrap(usuario: str, senha: str):
     )
 
 
-def autenticar(login: str, senha: str):
+def autenticar_aluno(login: str, senha: str):
+    """Autentica somente contas de aluno, inclusive por CPF."""
     login = (login or "").strip()
-
-    # Contas da equipe continuam tendo prioridade em caso de nomes legados.
-    usuario = database.obter_usuario_por_login(login)
-    if usuario and usuario.get("ativo") and check_password_hash(usuario.get("senha_hash") or "", senha or ""):
-        database.atualizar_ultimo_login(usuario["id"])
-        return database.obter_usuario(usuario["id"])
-
     acesso = database.obter_acesso_aluno_por_login(login)
     if not acesso:
         somente_digitos = "".join(c for c in login if c.isdigit())
@@ -43,10 +37,23 @@ def autenticar(login: str, senha: str):
         "id": acesso["id"],
         "login": acesso["login"],
         "nome": acesso["nome"],
+        "matricula": acesso.get("matricula"),
         "papel": "ALUNO",
         "pessoa_id": acesso["pessoa_id"],
         "ativo": acesso["ativo"],
     }
+
+
+def autenticar(login: str, senha: str):
+    login = (login or "").strip()
+
+    # Contas da equipe continuam tendo prioridade em caso de nomes legados.
+    usuario = database.obter_usuario_por_login(login)
+    if usuario and usuario.get("ativo") and check_password_hash(usuario.get("senha_hash") or "", senha or ""):
+        database.atualizar_ultimo_login(usuario["id"])
+        return database.obter_usuario(usuario["id"])
+
+    return autenticar_aluno(login, senha)
 
 
 def papel_valido(papel: str) -> bool:

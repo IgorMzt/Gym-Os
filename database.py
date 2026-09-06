@@ -3,14 +3,14 @@
 import json
 import sqlite3
 import shutil
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
 import numpy as np
 
 DB_PATH = Path(__file__).parent / "perfis.db"
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 DEFAULT_PLANS = [
     ("Mensal", 11990, 30, "Acesso por 30 dias."),
@@ -603,6 +603,30 @@ def criar_tabelas():
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_aluno_acessos_ativo ON aluno_acessos(ativo, pessoa_id)")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobile_refresh_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                aluno_acesso_id INTEGER NOT NULL,
+                pessoa_id INTEGER NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT,
+                replaced_by_hash TEXT,
+                last_used_at TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (aluno_acesso_id) REFERENCES aluno_acessos(id) ON DELETE CASCADE,
+                FOREIGN KEY (pessoa_id) REFERENCES pessoas(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mobile_refresh_ativo "
+            "ON mobile_refresh_tokens(aluno_acesso_id, revoked_at, expires_at)"
+        )
 
         conn.execute(
             """
@@ -2972,6 +2996,115 @@ def estatisticas_avaliacoes(pessoa_ids=None):
             "ultimos_30_dias": int(row["ultimos_30_dias"] or 0),
             "alunos_sem_avaliacao": max(0, int(total_alunos) - avaliados),
         }
+    finally:
+        conn.close()
+
+
+# ---------- Tokens mobile ----------
+
+def criar_refresh_token_mobile(aluno_acesso_id: int, pessoa_id: int, token_hash: str,
+                               expires_at: str, ip=None, user_agent=None):
+    conn = conectar()
+    try:
+        conn.execute(
+            """
+            INSERT INTO mobile_refresh_tokens(
+                aluno_acesso_id,pessoa_id,token_hash,expires_at,ip,user_agent
+            ) VALUES(?,?,?,?,?,?)
+            """,
+            (aluno_acesso_id, pessoa_id, token_hash, expires_at, ip, user_agent),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def rotacionar_refresh_token_mobile(token_hash: str, novo_token_hash: str,
+                                    novo_expires_at: str, ip=None, user_agent=None):
+    """Consome um refresh token uma unica vez e cria o sucessor na mesma transacao."""
+    conn = conectar()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            """
+            SELECT rt.id,rt.aluno_acesso_id,rt.pessoa_id,rt.expires_at,rt.revoked_at,
+                   aa.ativo AS acesso_ativo
+            FROM mobile_refresh_tokens rt
+            JOIN aluno_acessos aa ON aa.id=rt.aluno_acesso_id
+            WHERE rt.token_hash=?
+            LIMIT 1
+            """,
+            (token_hash,),
+        ).fetchone()
+        agora = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        if not row or row["revoked_at"] or not row["acesso_ativo"] or str(row["expires_at"]) <= agora:
+            conn.rollback()
+            return None
+
+        cur = conn.execute(
+            """
+            UPDATE mobile_refresh_tokens
+            SET revoked_at=CURRENT_TIMESTAMP,replaced_by_hash=?,last_used_at=CURRENT_TIMESTAMP
+            WHERE id=? AND revoked_at IS NULL
+            """,
+            (novo_token_hash, row["id"]),
+        )
+        if cur.rowcount != 1:
+            conn.rollback()
+            return None
+
+        conn.execute(
+            """
+            INSERT INTO mobile_refresh_tokens(
+                aluno_acesso_id,pessoa_id,token_hash,expires_at,ip,user_agent
+            ) VALUES(?,?,?,?,?,?)
+            """,
+            (row["aluno_acesso_id"], row["pessoa_id"], novo_token_hash, novo_expires_at, ip, user_agent),
+        )
+        conn.commit()
+        return {
+            "aluno_acesso_id": int(row["aluno_acesso_id"]),
+            "pessoa_id": int(row["pessoa_id"]),
+        }
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def revogar_refresh_token_mobile(token_hash: str) -> bool:
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            """
+            UPDATE mobile_refresh_tokens
+            SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP),last_used_at=CURRENT_TIMESTAMP
+            WHERE token_hash=?
+            """,
+            (token_hash,),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def obter_acesso_aluno_api(acesso_id: int, pessoa_id: int):
+    conn = conectar()
+    try:
+        row = conn.execute(
+            """
+            SELECT aa.id,aa.pessoa_id,aa.login,aa.ativo,aa.ultimo_login,
+                   p.nome,p.matricula,p.foto_path
+            FROM aluno_acessos aa
+            JOIN pessoas p ON p.id=aa.pessoa_id
+            WHERE aa.id=? AND aa.pessoa_id=?
+            LIMIT 1
+            """,
+            (acesso_id, pessoa_id),
+        ).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 

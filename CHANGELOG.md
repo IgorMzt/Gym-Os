@@ -1,3 +1,12 @@
+## V6.2 - em desenvolvimento
+
+- Adicionada base da API REST mobile em `/api/v1`.
+- Login exclusivo de aluno com access token curto e refresh token rotativo.
+- Refresh tokens persistidos apenas por hash, com revogação e rotação.
+- Adicionado `GET /api/v1/aluno/me` para o perfil autenticado.
+- CSRF web não é aplicado à API bearer-token; o PWA e sessões web permanecem inalterados.
+- Schema atualizado para 17 com `mobile_refresh_tokens`.
+
 # Changelog
 
 ## V6.1 - em desenvolvimento
