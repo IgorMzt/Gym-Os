@@ -81,7 +81,7 @@ def _registrar_falha_primeiro_acesso(ip):
 def pagina_login():
     if session.get("usuario_logado"):
         papel = session.get("usuario_papel")
-        destino = "pagina_minha_area" if papel == "PROFESSOR" else ("aluno_app_inicio" if papel == "ALUNO" else "pagina_painel")
+        destino = "professores.pagina_minha_area" if papel == "PROFESSOR" else ("aluno_app.aluno_app_inicio" if papel == "ALUNO" else "dashboard.pagina_painel")
         return redirect(url_for(destino))
 
     erro = None

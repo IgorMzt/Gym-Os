@@ -4,7 +4,7 @@
 {% block conteudo %}
 <section class="execution-session-head-v56">
   <div>
-    <a href="{{ url_for('pagina_execucoes') }}" class="back-link-v56">← Voltar ao histórico</a>
+    <a href="{{ url_for('execucoes.pagina_execucoes') }}" class="back-link-v56">← Voltar ao histórico</a>
     <div class="eyebrow">{{ sessao.aluno_nome }}</div>
     <h1>{{ sessao.treino_nome }}</h1>
     <p>{{ sessao.ficha_nome }} · iniciado em {{ sessao.iniciado_em }}</p>

@@ -37,7 +37,7 @@
       <div class="execution-progress-mini-v56"><b>{{ s.exercicios_concluidos }}/{{ s.total_exercicios }}</b><span>exercícios</span></div>
       <div><span class="badge {% if s.status=='CONCLUIDO' %}badge--success{% elif s.status=='EM_ANDAMENTO' %}badge--warning{% else %}badge--muted{% endif %}">{{ s.status|replace('_',' ')|title }}</span></div>
       <div class="execution-date-v56">{{ s.iniciado_em }}</div>
-      <a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_execucao',sessao_id=s.id) }}">{{ 'Continuar' if s.status=='EM_ANDAMENTO' else 'Detalhes' }}</a>
+      <a class="btn btn--secundario btn--mini" href="{{ url_for('execucoes.pagina_execucao',sessao_id=s.id) }}">{{ 'Continuar' if s.status=='EM_ANDAMENTO' else 'Detalhes' }}</a>
     </article>
   {% else %}<div class="empty-state-v53">Nenhuma sessão de treino registrada.</div>{% endfor %}
   </div>

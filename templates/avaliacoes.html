@@ -17,7 +17,7 @@
       <div class="assessment-student-avatar-v57">{% if a.foto_path %}<img src="{{ url_for('static',filename=a.foto_path) }}" alt="">{% else %}<span>{{ a.nome[:1]|upper }}</span>{% endif %}</div>
       <div class="assessment-student-info-v57"><small>{{ a.matricula or 'SEM MATRÍCULA' }}</small><h3>{{ a.nome }}</h3><span>{% if a.ultima_avaliacao %}Última: {{ a.ultima_avaliacao }}{% else %}Nunca avaliado{% endif %}</span></div>
       <div class="assessment-student-metrics-v57"><div><small>PESO</small><strong>{{ ('%.1f'|format(a.ultimo_peso)) ~ ' kg' if a.ultimo_peso is not none else '—' }}</strong></div><div><small>GORDURA</small><strong>{{ ('%.1f'|format(a.ultima_gordura)) ~ '%' if a.ultima_gordura is not none else '—' }}</strong></div></div>
-      <a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_avaliacoes_aluno',pessoa_id=a.id) }}">{{ 'Abrir evolução' if a.total_avaliacoes else 'Avaliar' }}</a>
+      <a class="btn btn--secundario btn--mini" href="{{ url_for('avaliacoes.pagina_avaliacoes_aluno',pessoa_id=a.id) }}">{{ 'Abrir evolução' if a.total_avaliacoes else 'Avaliar' }}</a>
     </article>
   {% else %}<div class="empty-state-v53">Nenhum aluno disponível.</div>{% endfor %}
   </div>

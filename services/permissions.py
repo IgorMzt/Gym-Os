@@ -34,7 +34,7 @@ def papel_requerido(*papeis):
             if papel_atual() not in permitidos:
                 if request.path.startswith("/api/"):
                     return jsonify({"sucesso": False, "erro": "Você não tem permissão para esta ação."}), 403
-                destino = "pagina_minha_area" if papel_atual() == "PROFESSOR" else ("aluno_app_inicio" if papel_atual() == "ALUNO" else "pagina_painel")
+                destino = "professores.pagina_minha_area" if papel_atual() == "PROFESSOR" else ("aluno_app.aluno_app_inicio" if papel_atual() == "ALUNO" else "dashboard.pagina_painel")
                 return redirect(url_for(destino))
             return view(*args, **kwargs)
         return wrapper

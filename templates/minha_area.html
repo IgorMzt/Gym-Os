@@ -21,7 +21,7 @@
 <article class="prof-student-card-v551" data-search="{{ aluno.nome|lower|e }}">
 <div class="prof-student-avatar-v551">{% if aluno.foto_path %}<img src="{{ url_for('static',filename=aluno.foto_path) }}" alt="">{% else %}<span>{{ aluno.nome[:1]|upper }}</span>{% endif %}</div>
 <div class="prof-student-info-v551"><small>MEU ALUNO</small><h3>{{ aluno.nome }}</h3><span>{{ aluno.plano or 'Sem plano informado' }}</span><small>Última atividade: {{ aluno.ultimo_acesso or 'Sem registro' }}</small></div>
-<div class="prof-student-actions-v551"><a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_aluno_professor',pessoa_id=aluno.id) }}">Perfil</a><a class="btn btn--secundario btn--mini" href="{{ url_for('pagina_treinos') }}">Treinos</a><button type="button" class="link-danger-v53 liberar-aluno-v551" data-id="{{ aluno.id }}" data-nome="{{ aluno.nome|e }}">Liberar</button></div>
+<div class="prof-student-actions-v551"><a class="btn btn--secundario btn--mini" href="{{ url_for('professores.pagina_aluno_professor',pessoa_id=aluno.id) }}">Perfil</a><a class="btn btn--secundario btn--mini" href="{{ url_for('treinos.pagina_treinos') }}">Treinos</a><button type="button" class="link-danger-v53 liberar-aluno-v551" data-id="{{ aluno.id }}" data-nome="{{ aluno.nome|e }}">Liberar</button></div>
 </article>
 {% else %}<div class="empty-state-v53">Você ainda não assumiu nenhum aluno.</div>{% endfor %}
 </div></div>

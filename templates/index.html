@@ -14,7 +14,7 @@
     </div>
     <div class="v5-hero__actions">
       <span class="live-data-chip"><i></i>Dados ao vivo</span>
-      <a class="btn btn--primario" href="{{ url_for('pagina_cadastro') }}">+ Novo aluno</a>
+      <a class="btn btn--primario" href="{{ url_for('operacoes.pagina_cadastro') }}">+ Novo aluno</a>
     </div>
   </section>
 
@@ -86,12 +86,12 @@
     <section class="v5-panel">
       <div class="v5-panel__heading">
         <div><span class="eyebrow">ATENÇÃO DA RECEPÇÃO</span><h2>Alertas inteligentes</h2><p>Prioridades geradas pelos dados atuais.</p></div>
-        <a href="{{ url_for('pagina_gerenciar') }}" class="text-link">Ver alunos →</a>
+        <a href="{{ url_for('operacoes.pagina_gerenciar') }}" class="text-link">Ver alunos →</a>
       </div>
       <div class="v5-alerts" id="v5-alerts">
         {% for a in dash.alertas %}
         {% if a.pessoa_id %}
-        <a class="v5-alert v5-alert--{{ a.nivel }}" href="{{ url_for('pagina_aluno', pessoa_id=a.pessoa_id) }}">
+        <a class="v5-alert v5-alert--{{ a.nivel }}" href="{{ url_for('operacoes.pagina_aluno', pessoa_id=a.pessoa_id) }}">
           <i></i><div><strong>{{ a.titulo }}</strong><span>{{ a.texto }}</span></div><b>›</b>
         </a>
         {% else %}
@@ -115,7 +115,7 @@
       <div class="v5-presence-list" id="v5-presence-list">
         {% for p in dash.presenca %}
         {% if p.pessoa_id %}
-        <a class="v5-person" href="{{ url_for('pagina_aluno', pessoa_id=p.pessoa_id) }}">
+        <a class="v5-person" href="{{ url_for('operacoes.pagina_aluno', pessoa_id=p.pessoa_id) }}">
           <div class="v5-avatar">
             {% if p.foto_url %}<img src="{{ p.foto_url }}" alt="">{% else %}<span>{{ (p.nome or '?')[:1]|upper }}</span>{% endif %}
           </div>
@@ -138,7 +138,7 @@
     <section class="v5-panel">
       <div class="v5-panel__heading">
         <div><span class="eyebrow">TEMPO REAL</span><h2>Fluxo da unidade</h2><p>Últimas decisões do controle de acesso.</p></div>
-        <a href="{{ url_for('pagina_historico') }}" class="text-link">Histórico →</a>
+        <a href="{{ url_for('operacoes.pagina_historico') }}" class="text-link">Histórico →</a>
       </div>
       <div class="v5-feed" id="v5-feed">
         {% for log in dash.feed %}
@@ -154,7 +154,7 @@
     <section class="v5-panel">
       <div class="v5-panel__heading">
         <div><span class="eyebrow">INFRAESTRUTURA</span><h2>Catracas</h2><p>Configuração e último evento registrado.</p></div>
-        <a href="{{ url_for('pagina_configuracoes') }}" class="text-link">Configurar →</a>
+        <a href="{{ url_for('operacoes.pagina_configuracoes') }}" class="text-link">Configurar →</a>
       </div>
       <div class="v5-devices" id="v5-devices">
         {% for c in dash.catracas %}
@@ -178,7 +178,7 @@
         <div class="v5-finance-recent" id="v5-finance-recent">
           {% for pg in dash.financeiro.pagamentos_recentes %}
             {% if pg.pessoa_id %}
-            <a href="{{ url_for('pagina_aluno', pessoa_id=pg.pessoa_id) }}"><span><strong>{{ pg.nome or 'Aluno' }}</strong><small>{{ pg.data_pagamento }}</small></span><b>{{ pg.valor_centavos|moeda }}</b></a>
+            <a href="{{ url_for('operacoes.pagina_aluno', pessoa_id=pg.pessoa_id) }}"><span><strong>{{ pg.nome or 'Aluno' }}</strong><small>{{ pg.data_pagamento }}</small></span><b>{{ pg.valor_centavos|moeda }}</b></a>
             {% else %}
             <div class="v5-finance-history-row"><span><strong>{{ pg.nome or 'Aluno removido' }}</strong><small>{{ pg.data_pagamento }} · histórico preservado</small></span><b>{{ pg.valor_centavos|moeda }}</b></div>
             {% endif %}

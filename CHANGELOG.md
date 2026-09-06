@@ -1,5 +1,12 @@
 # Changelog
 
+## V6.1 - em desenvolvimento
+- Modularização completa das rotas Flask em Blueprints por domínio.
+- `app.py` reduzido ao bootstrap, segurança global, filtros e registro dos módulos.
+- Helpers web compartilhados centralizados em `routes/common.py`.
+- Endpoints internos e referências `url_for()` atualizados para os namespaces dos Blueprints.
+- Sem alteração de regras de negócio, banco de dados ou interface.
+
 ## V6.1.1 - em desenvolvimento
 
 - Início da modularização Flask com Blueprint dedicado à autenticação.

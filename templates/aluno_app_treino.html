@@ -3,7 +3,7 @@
 {% block conteudo %}
 <section class="student-page-title-v58"><small>MINHA ROTINA</small><h1>Meu treino</h1><p>{% if ficha %}{{ ficha.nome }}{% else %}Nenhuma ficha ativa{% endif %}</p></section>
 {% if sessao %}
-<a href="{{ url_for('aluno_app_execucao',sessao_id=sessao.id) }}" class="student-resume-v58"><div><small>EM ANDAMENTO</small><strong>{{ sessao.treino_nome }}</strong><span>{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }} concluídos</span></div><b>Continuar →</b></a>
+<a href="{{ url_for('aluno_app.aluno_app_execucao',sessao_id=sessao.id) }}" class="student-resume-v58"><div><small>EM ANDAMENTO</small><strong>{{ sessao.treino_nome }}</strong><span>{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }} concluídos</span></div><b>Continuar →</b></a>
 {% endif %}
 {% if ficha %}
 <div class="student-workout-list-v58">

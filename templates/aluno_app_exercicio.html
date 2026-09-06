@@ -1,5 +1,5 @@
 {% extends "aluno_app_base.html" %}{% block titulo %}Evolução do exercício · Panobianco{% endblock %}{% block conteudo %}
-<section class="student-page-title-v58"><a href="{{ url_for('aluno_app_historico') }}">← Histórico</a><small>EVOLUÇÃO DE CARGA</small><h1>{{ historico[0].exercicio_nome }}</h1><p>Seus registros concluídos neste exercício.</p></section>
+<section class="student-page-title-v58"><a href="{{ url_for('aluno_app.aluno_app_historico') }}">← Histórico</a><small>EVOLUÇÃO DE CARGA</small><h1>{{ historico[0].exercicio_nome }}</h1><p>Seus registros concluídos neste exercício.</p></section>
 <section class="student-section-v58"><div class="student-load-chart-v591" data-values='{{ historico[::-1]|map(attribute="carga_realizada")|list|tojson }}'><canvas id="load-chart-v591" height="180"></canvas></div>
 {% for h in historico %}<div class="student-finance-row-v59"><div><strong>{{ h.iniciado_em }}</strong><span>{{ h.series_realizadas or '—' }} séries · {{ h.repeticoes_realizadas or '—' }} reps</span></div><div><b>{{ h.carga_realizada or '—' }}</b></div></div>{% endfor %}</section>
 {% endblock %}{% block scripts %}<script src="{{ url_for('static',filename='js/aluno_app_exercicio.js',v='5.9.1') }}"></script>{% endblock %}

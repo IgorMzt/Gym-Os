@@ -3,7 +3,7 @@
 {% block conteudo %}
 <div class="page-header page-header--row">
   <div><div class="eyebrow">ALUNOS</div><h1>Novo aluno</h1><p>Cadastre a ficha completa e capture cinco amostras faciais.</p></div>
-  <a class="btn btn--outline" href="{{ url_for('pagina_gerenciar') }}">Voltar aos alunos</a>
+  <a class="btn btn--outline" href="{{ url_for('operacoes.pagina_gerenciar') }}">Voltar aos alunos</a>
 </div>
 <div class="registration-grid">
   <section class="camera-card">
@@ -40,7 +40,7 @@
 {% block scripts %}
 <script>
 window.CADASTRO_CONFIG = {
-  redirectUrl: {{ url_for('pagina_gerenciar')|tojson }},
+  redirectUrl: {{ url_for('operacoes.pagina_gerenciar')|tojson }},
   preparacaoCapturaMs: {{ cadastro_preparacao_captura_ms|int }},
   intervaloCapturaMs: {{ cadastro_intervalo_captura_ms|int }}
 };

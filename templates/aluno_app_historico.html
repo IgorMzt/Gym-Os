@@ -5,7 +5,7 @@
 {% if sessoes %}
 <section class="student-section-v58">
 {% for s in sessoes %}
-<a class="student-history-row-v58" href="{{ url_for('aluno_app_execucao',sessao_id=s.id) }}"><div><strong>{{ s.treino_nome }}</strong><span>{{ s.iniciado_em }} · {{ s.exercicios_concluidos }}/{{ s.total_exercicios }} exercícios{% if s.duracao_segundos %} · {{ (s.duracao_segundos/60)|round|int }} min{% endif %}</span></div><b class="{{ 'ok' if s.status=='CONCLUIDO' else '' }}">{{ s.status|replace('_',' ')|title }}</b></a>
+<a class="student-history-row-v58" href="{{ url_for('aluno_app.aluno_app_execucao',sessao_id=s.id) }}"><div><strong>{{ s.treino_nome }}</strong><span>{{ s.iniciado_em }} · {{ s.exercicios_concluidos }}/{{ s.total_exercicios }} exercícios{% if s.duracao_segundos %} · {{ (s.duracao_segundos/60)|round|int }} min{% endif %}</span></div><b class="{{ 'ok' if s.status=='CONCLUIDO' else '' }}">{{ s.status|replace('_',' ')|title }}</b></a>
 {% endfor %}
 </section>
 {% else %}<section class="student-empty-v58"><b>Seu histórico está vazio</b><span>Os treinos concluídos aparecerão aqui.</span></section>{% endif %}

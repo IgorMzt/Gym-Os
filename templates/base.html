@@ -22,7 +22,7 @@
 <body class="{% block body_class %}{% endblock %} {{ 'admin-shell-active' if session.get('usuario_logado') else 'public-shell' }}">
 {% if session.get('usuario_logado') %}
   <aside class="admin-sidebar" id="admin-sidebar">
-    <a class="admin-brand" href="{{ url_for('pagina_minha_area') if session.get('usuario_papel') == 'PROFESSOR' else url_for('pagina_painel') }}">
+    <a class="admin-brand" href="{{ url_for('professores.pagina_minha_area') if session.get('usuario_papel') == 'PROFESSOR' else url_for('dashboard.pagina_painel') }}">
       <img src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
       <span><strong>PANOBIANCO</strong><small>GYM OS</small></span>
     </a>
@@ -30,38 +30,38 @@
     <nav class="admin-nav" aria-label="Navegação do sistema">
       {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
       <div class="admin-nav__section">GESTÃO</div>
-      <a href="{{ url_for('pagina_painel') }}" class="{{ 'ativo' if request.path == '/' else '' }}"><span>⌂</span>Dashboard</a>
-      <a href="{{ url_for('pagina_gerenciar') }}" class="{{ 'ativo' if request.path == '/gerenciar' or request.path.startswith('/alunos/') or request.path == '/cadastro' else '' }}"><span>◎</span>Alunos</a>
+      <a href="{{ url_for('dashboard.pagina_painel') }}" class="{{ 'ativo' if request.path == '/' else '' }}"><span>⌂</span>Dashboard</a>
+      <a href="{{ url_for('operacoes.pagina_gerenciar') }}" class="{{ 'ativo' if request.path == '/gerenciar' or request.path.startswith('/alunos/') or request.path == '/cadastro' else '' }}"><span>◎</span>Alunos</a>
       {% endif %}
       {% if session.get('usuario_papel') == 'ADMIN' %}
-      <a href="{{ url_for('pagina_planos') }}" class="{{ 'ativo' if request.path == '/planos' else '' }}"><span>▣</span>Planos</a>
-      <a href="{{ url_for('pagina_professores') }}" class="{{ 'ativo' if request.path.startswith('/professores') else '' }}"><span>♟</span>Professores</a>
-      <a href="{{ url_for('pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
-      <a href="{{ url_for('pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
-      <a href="{{ url_for('pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
-      <a href="{{ url_for('pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
+      <a href="{{ url_for('operacoes.pagina_planos') }}" class="{{ 'ativo' if request.path == '/planos' else '' }}"><span>▣</span>Planos</a>
+      <a href="{{ url_for('professores.pagina_professores') }}" class="{{ 'ativo' if request.path.startswith('/professores') else '' }}"><span>♟</span>Professores</a>
+      <a href="{{ url_for('exercicios.pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
+      <a href="{{ url_for('treinos.pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
+      <a href="{{ url_for('execucoes.pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
+      <a href="{{ url_for('avaliacoes.pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
       {% endif %}
 
       {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
       <div class="admin-nav__section">OPERAÇÃO</div>
-      <a href="{{ url_for('pagina_catraca') }}" class="{{ 'ativo' if request.path in ['/catraca','/verificacao'] else '' }}"><span>⇥</span>Catraca</a>
-      <a href="{{ url_for('pagina_historico') }}" class="{{ 'ativo' if request.path == '/historico' else '' }}"><span>↺</span>Histórico</a>
+      <a href="{{ url_for('operacoes.pagina_catraca') }}" class="{{ 'ativo' if request.path in ['/catraca','/verificacao'] else '' }}"><span>⇥</span>Catraca</a>
+      <a href="{{ url_for('operacoes.pagina_historico') }}" class="{{ 'ativo' if request.path == '/historico' else '' }}"><span>↺</span>Histórico</a>
       {% endif %}
 
       {% if session.get('usuario_papel') == 'PROFESSOR' %}
       <div class="admin-nav__section">PROFESSOR</div>
-      <a href="{{ url_for('pagina_minha_area') }}" class="{{ 'ativo' if request.path == '/minha-area' else '' }}"><span>◇</span>Minha área</a>
-      <a href="{{ url_for('pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
-      <a href="{{ url_for('pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
-      <a href="{{ url_for('pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
-      <a href="{{ url_for('pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
+      <a href="{{ url_for('professores.pagina_minha_area') }}" class="{{ 'ativo' if request.path == '/minha-area' else '' }}"><span>◇</span>Minha área</a>
+      <a href="{{ url_for('exercicios.pagina_exercicios') }}" class="{{ 'ativo' if request.path.startswith('/exercicios') else '' }}"><span>▦</span>Exercícios</a>
+      <a href="{{ url_for('treinos.pagina_treinos') }}" class="{{ 'ativo' if request.path.startswith('/treinos') else '' }}"><span>▤</span>Fichas de treino</a>
+      <a href="{{ url_for('execucoes.pagina_execucoes') }}" class="{{ 'ativo' if request.path.startswith('/execucoes') else '' }}"><span>▶</span>Execuções</a>
+      <a href="{{ url_for('avaliacoes.pagina_avaliacoes') }}" class="{{ 'ativo' if request.path.startswith('/avaliacoes') else '' }}"><span>◈</span>Avaliações</a>
       {% endif %}
 
       {% if session.get('usuario_papel') == 'ADMIN' %}
       <div class="admin-nav__section">SISTEMA</div>
-      <a href="{{ url_for('pagina_usuarios') }}" class="{{ 'ativo' if request.path == '/usuarios' else '' }}"><span>♙</span>Usuários</a>
-      <a href="{{ url_for('pagina_configuracoes') }}" class="{{ 'ativo' if request.path == '/configuracoes' else '' }}"><span>⚙</span>Configurações</a>
-      <a href="{{ url_for('pagina_diagnostico') }}" class="{{ 'ativo' if request.path == '/diagnostico' else '' }}"><span>◇</span>Diagnóstico</a>
+      <a href="{{ url_for('usuarios.pagina_usuarios') }}" class="{{ 'ativo' if request.path == '/usuarios' else '' }}"><span>♙</span>Usuários</a>
+      <a href="{{ url_for('operacoes.pagina_configuracoes') }}" class="{{ 'ativo' if request.path == '/configuracoes' else '' }}"><span>⚙</span>Configurações</a>
+      <a href="{{ url_for('operacoes.pagina_diagnostico') }}" class="{{ 'ativo' if request.path == '/diagnostico' else '' }}"><span>◇</span>Diagnóstico</a>
       {% endif %}
     </nav>
 
@@ -102,7 +102,7 @@
 
 {% else %}
   <header class="topbar">
-    <a class="brand" href="{{ url_for('pagina_catraca') }}">
+    <a class="brand" href="{{ url_for('operacoes.pagina_catraca') }}">
       <img class="brand-mark-img" src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
       <span><strong>PANOBIANCO</strong><small>CONTROLE DE ACESSO</small></span>
     </a>

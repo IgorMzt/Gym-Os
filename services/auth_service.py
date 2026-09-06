@@ -55,7 +55,7 @@ def papel_valido(papel: str) -> bool:
 
 def destino_inicial(usuario: dict) -> str:
     if usuario.get("papel") == "PROFESSOR":
-        return "pagina_minha_area"
+        return "professores.pagina_minha_area"
     if usuario.get("papel") == "ALUNO":
-        return "aluno_app_inicio"
-    return "pagina_painel"
+        return "aluno_app.aluno_app_inicio"
+    return "dashboard.pagina_painel"

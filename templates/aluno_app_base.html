@@ -13,16 +13,16 @@
 </head>
 <body class="student-app-v58">
 <header class="student-top-v58">
-  <a href="{{ url_for('aluno_app_inicio') }}" class="student-brand-v58"><img src="{{ url_for('static',filename='assets/panobianco-mark-laranja.png') }}" alt=""><span>PANOBIANCO<small>MEU APP</small></span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_inicio') }}" class="student-brand-v58"><img src="{{ url_for('static',filename='assets/panobianco-mark-laranja.png') }}" alt=""><span>PANOBIANCO<small>MEU APP</small></span></a>
   <div class="student-top-actions-v58"><span>{{ session.get('usuario_nome','Aluno').split(' ')[0] }}</span><a href="{{ url_for('auth.logout') }}" class="student-logout-v58">Sair</a></div>
 </header>
 <main class="student-main-v58">{% block conteudo %}{% endblock %}</main>
 <nav class="student-bottom-v58 student-bottom-v591">
-  <a href="{{ url_for('aluno_app_inicio') }}" class="{{ 'active' if request.endpoint=='aluno_app_inicio' else '' }}"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V21h-6v-6H9v6H3z"/></svg><span>Início</span></a>
-  <a href="{{ url_for('aluno_app_historico') }}" class="{{ 'active' if request.endpoint in ['aluno_app_historico','aluno_app_exercicio'] else '' }}"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6V4H2v8h8v-2H5.4l2.3-2.3A6 6 0 1 1 6 12z"/></svg><span>Histórico</span></a>
-  <a href="{{ url_for('aluno_app_treino') }}" class="student-train-tab-v591 {{ 'active' if request.endpoint in ['aluno_app_treino','aluno_app_execucao'] else '' }}"><b><svg viewBox="0 0 24 24"><path d="M7 8h2v8H7v-2H5v-4h2zm8 0h2v2h2v4h-2v2h-2zM9 11h6v2H9z"/></svg></b><span>Treino</span></a>
-  <a href="{{ url_for('aluno_app_evolucao') }}" class="{{ 'active' if request.endpoint=='aluno_app_evolucao' else '' }}"><svg viewBox="0 0 24 24"><path d="m4 17 5-5 3 3 6-7h-3V6h7v7h-2V9.7l-7.8 9.1-3.2-3.2L5.4 19z"/></svg><span>Evolução</span></a>
-  <a href="{{ url_for('aluno_app_perfil') }}" class="{{ 'active' if request.endpoint in ['aluno_app_perfil','aluno_app_financeiro'] else '' }}"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0z"/></svg><span>Perfil</span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_inicio') }}" class="{{ 'active' if request.endpoint=='aluno_app.aluno_app_inicio' else '' }}"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5V21h-6v-6H9v6H3z"/></svg><span>Início</span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_historico') }}" class="{{ 'active' if request.endpoint in ['aluno_app.aluno_app_historico','aluno_app.aluno_app_exercicio'] else '' }}"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6V4H2v8h8v-2H5.4l2.3-2.3A6 6 0 1 1 6 12z"/></svg><span>Histórico</span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_treino') }}" class="student-train-tab-v591 {{ 'active' if request.endpoint in ['aluno_app.aluno_app_treino','aluno_app.aluno_app_execucao'] else '' }}"><b><svg viewBox="0 0 24 24"><path d="M7 8h2v8H7v-2H5v-4h2zm8 0h2v2h2v4h-2v2h-2zM9 11h6v2H9z"/></svg></b><span>Treino</span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_evolucao') }}" class="{{ 'active' if request.endpoint=='aluno_app.aluno_app_evolucao' else '' }}"><svg viewBox="0 0 24 24"><path d="m4 17 5-5 3 3 6-7h-3V6h7v7h-2V9.7l-7.8 9.1-3.2-3.2L5.4 19z"/></svg><span>Evolução</span></a>
+  <a href="{{ url_for('aluno_app.aluno_app_perfil') }}" class="{{ 'active' if request.endpoint in ['aluno_app.aluno_app_perfil','aluno_app.aluno_app_financeiro'] else '' }}"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0z"/></svg><span>Perfil</span></a>
 </nav>
 <div class="student-top-actions-v58"><span>{{ session.get('usuario_nome','Aluno').split(' ')[0] }}</span><a href="{{ url_for('auth.logout') }}" class="student-logout-v58">Sair</a></div>
 <script>window.STUDENT_CSRF={{ csrf_token|tojson }};</script>

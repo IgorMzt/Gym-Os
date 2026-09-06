@@ -5,7 +5,7 @@
 <section class="assessment-profile-head-v57">
   <div class="assessment-profile-person-v57">
     <div class="assessment-profile-avatar-v57">{% if pessoa.foto_path %}<img src="{{ url_for('static',filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
-    <div><a href="{{ url_for('pagina_avaliacoes') }}" class="back-link-v56">← Avaliações</a><div class="eyebrow">{{ pessoa.matricula or 'ALUNO' }}</div><h1>{{ pessoa.nome }}</h1><p>{{ avaliacoes|length }} avaliação(ões) registrada(s)</p></div>
+    <div><a href="{{ url_for('avaliacoes.pagina_avaliacoes') }}" class="back-link-v56">← Avaliações</a><div class="eyebrow">{{ pessoa.matricula or 'ALUNO' }}</div><h1>{{ pessoa.nome }}</h1><p>{{ avaliacoes|length }} avaliação(ões) registrada(s)</p></div>
   </div>
   <button class="btn btn--primario" id="nova-avaliacao-v57" type="button">+ Nova avaliação</button>
 </section>
