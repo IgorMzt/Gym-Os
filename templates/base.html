@@ -77,7 +77,7 @@
         <button type="button" class="theme-btn" data-tema="system" title="Tema do sistema">◐</button>
         <button type="button" class="theme-btn" data-tema="dark" title="Modo escuro">◑</button>
       </div>
-      <a class="admin-logout" href="{{ url_for('logout') }}">Sair</a>
+      <a class="admin-logout" href="{{ url_for('auth.logout') }}">Sair</a>
     </div>
   </aside>
 
@@ -113,7 +113,7 @@
         <button type="button" class="theme-btn" data-tema="dark">◑</button>
       </div>
       <div class="topbar-clock" id="relogio">--:--:--</div>
-      <a class="logout-link" href="{{ url_for('pagina_login') }}">Equipe</a>
+      <a class="logout-link" href="{{ url_for('auth.pagina_login') }}">Equipe</a>
     </div>
   </header>
 {% endif %}

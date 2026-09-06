@@ -17,7 +17,7 @@ def login_obrigatorio(view):
         if not usuario_logado():
             if request.path.startswith("/api/"):
                 return jsonify({"sucesso": False, "erro": "Autenticação necessária."}), 401
-            return redirect(url_for("pagina_login", proxima=request.path))
+            return redirect(url_for("auth.pagina_login", proxima=request.path))
         return view(*args, **kwargs)
     return wrapper
 
@@ -30,7 +30,7 @@ def papel_requerido(*papeis):
             if not usuario_logado():
                 if request.path.startswith("/api/"):
                     return jsonify({"sucesso": False, "erro": "Autenticação necessária."}), 401
-                return redirect(url_for("pagina_login", proxima=request.path))
+                return redirect(url_for("auth.pagina_login", proxima=request.path))
             if papel_atual() not in permitidos:
                 if request.path.startswith("/api/"):
                     return jsonify({"sucesso": False, "erro": "Você não tem permissão para esta ação."}), 403
