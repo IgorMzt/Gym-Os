@@ -1,5 +1,11 @@
 # Changelog
 
+## V6.1.1 - em desenvolvimento
+
+- Início da modularização Flask com Blueprint dedicado à autenticação.
+- Rotas de login, logout e primeiro acesso extraídas do `app.py`.
+- Endpoints de autenticação atualizados sem alterar regras de negócio ou telas.
+
 ## 5.9.1
 
 - Primeiro acesso do aluno por CPF, matrícula e data de nascimento.

@@ -18,7 +18,6 @@ import re
 import time
 import uuid
 from datetime import date, datetime, timedelta
-from functools import wraps
 from pathlib import Path
 
 import cv2
@@ -31,6 +30,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
+from routes.auth import auth_bp
 import database
 import config_service
 import device_manager
@@ -71,10 +71,6 @@ DEFAULT_LIVENESS_JANELA = 4
 ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 CREDENCIAL_PADRAO = ADMIN_USER == "admin" and ADMIN_PASSWORD == "admin123"
-LOGIN_MAX_TENTATIVAS = 5
-LOGIN_JANELA_SEGUNDOS = 300
-LOGIN_BLOQUEIO_SEGUNDOS = 300
-_login_tentativas = {}
 liveness_estado = {}
 
 # Banco e conta administrativa de bootstrap. A senha permanece controlada por ADMIN_PASSWORD.
@@ -85,31 +81,6 @@ auth_service.garantir_admin_bootstrap(ADMIN_USER, ADMIN_PASSWORD)
 
 def _ip_cliente():
     return request.remote_addr or "desconhecido"
-
-
-def _estado_login(ip):
-    agora = time.time()
-    estado = _login_tentativas.get(ip, {"tentativas": [], "bloqueado_ate": 0})
-    estado["tentativas"] = [t for t in estado["tentativas"] if agora - t < LOGIN_JANELA_SEGUNDOS]
-    if estado["bloqueado_ate"] <= agora:
-        estado["bloqueado_ate"] = 0
-    _login_tentativas[ip] = estado
-    return estado
-
-
-def _login_bloqueado(ip):
-    estado = _estado_login(ip)
-    restante = max(0, int(estado["bloqueado_ate"] - time.time()))
-    return restante
-
-
-def _registrar_falha_login(ip):
-    estado = _estado_login(ip)
-    estado["tentativas"].append(time.time())
-    if len(estado["tentativas"]) >= LOGIN_MAX_TENTATIVAS:
-        estado["bloqueado_ate"] = time.time() + LOGIN_BLOQUEIO_SEGUNDOS
-        estado["tentativas"] = []
-    _login_tentativas[ip] = estado
 
 
 def csrf_token():
@@ -131,7 +102,7 @@ def protecoes_globais():
     # A catraca pública precisa continuar POSTando para APIs operacionais.
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
-    if request.endpoint in {"pagina_login", "api_verificar", "api_presenca", "webhook_asaas"}:
+    if request.endpoint in {"auth.pagina_login", "api_verificar", "api_presenca", "webhook_asaas"}:
         return None
     if session.get("usuario_logado") and not _csrf_valido():
         if request.path.startswith("/api/"):
@@ -188,14 +159,6 @@ def moeda_filter(valor):
 @app.template_filter("data_br")
 def data_br_filter(valor):
     return formatar_data_br(valor)
-
-
-def local_seguro(caminho):
-    if not caminho or not isinstance(caminho, str):
-        return None
-    if caminho.startswith("/") and not caminho.startswith("//"):
-        return caminho
-    return None
 
 
 
@@ -424,107 +387,11 @@ def filtros_historico_seguros(origem):
 
 
 
-_primeiro_acesso_tentativas = {}
+# Rotas de autenticação foram extraídas para o Blueprint auth.
+app.register_blueprint(auth_bp)
 
-def _primeiro_acesso_bloqueado(ip):
-    agora=time.monotonic(); dados=_primeiro_acesso_tentativas.get(ip,[])
-    dados=[x for x in dados if agora-x < 900]; _primeiro_acesso_tentativas[ip]=dados
-    return len(dados)>=8
-
-def _registrar_falha_primeiro_acesso(ip):
-    _primeiro_acesso_tentativas.setdefault(ip,[]).append(time.monotonic())
 
 # ---------- Paginas ----------
-
-@app.route("/login", methods=["GET", "POST"])
-def pagina_login():
-    if session.get("usuario_logado"):
-        papel = session.get("usuario_papel")
-        destino = "pagina_minha_area" if papel == "PROFESSOR" else ("aluno_app_inicio" if papel == "ALUNO" else "pagina_painel")
-        return redirect(url_for(destino))
-
-    erro = None
-    ip = _ip_cliente()
-    restante = _login_bloqueado(ip)
-
-    if request.method == "POST":
-        if restante > 0:
-            erro = f"Muitas tentativas. Tente novamente em {restante} segundos."
-        else:
-            login = (request.form.get("usuario") or "").strip()
-            senha = request.form.get("senha") or ""
-            usuario = auth_service.autenticar(login, senha)
-            if usuario:
-                _login_tentativas.pop(ip, None)
-                session.clear()
-                session.permanent = True
-                session["usuario_logado"] = True
-                session["usuario_id"] = usuario["id"]
-                session["usuario_nome"] = usuario["nome"]
-                session["usuario_login"] = usuario["login"]
-                session["usuario_papel"] = usuario["papel"]
-                if usuario["papel"] == "ALUNO":
-                    session["aluno_id"] = usuario["pessoa_id"]
-                csrf_token()
-                database.registrar_log_admin("LOGIN", usuario["login"], f"Login realizado como {usuario['papel']}.", ip)
-                proxima = local_seguro(request.form.get("proxima"))
-                if not proxima or usuario["papel"] in {"PROFESSOR","ALUNO"}:
-                    proxima = url_for(auth_service.destino_inicial(usuario))
-                return redirect(proxima)
-            _registrar_falha_login(ip)
-            database.registrar_log_admin("LOGIN_FALHOU", login or "-", "Credenciais inválidas.", ip)
-            erro = "Usuário ou senha inválidos."
-
-    return render_template("login.html", erro=erro, bloqueio_segundos=restante)
-
-
-@app.route("/primeiro-acesso", methods=["GET","POST"])
-def primeiro_acesso():
-    if session.get("usuario_logado"):
-        return redirect(url_for(auth_service.destino_inicial({"papel":session.get("usuario_papel")})))
-    erro=None
-    if request.method=="POST":
-        ip=_ip_cliente()
-        if _primeiro_acesso_bloqueado(ip):
-            erro="Muitas tentativas. Aguarde alguns minutos e tente novamente."
-        else:
-            cpf=cpf_apenas_digitos(request.form.get("cpf") or "")
-            matricula=(request.form.get("matricula") or "").strip().upper()
-            nascimento=(request.form.get("data_nascimento") or "").strip()
-            login=(request.form.get("login") or "").strip()
-            senha=request.form.get("senha") or ""
-            confirmar=request.form.get("confirmar_senha") or ""
-            pessoa=database.obter_pessoa_por_primeiro_acesso(cpf,matricula,nascimento)
-            if not pessoa:
-                _registrar_falha_primeiro_acesso(ip)
-                erro="Não foi possível validar os dados informados."
-            elif database.obter_acesso_aluno_por_pessoa(pessoa["id"]):
-                erro="Esta matrícula já possui acesso ao app. Entre normalmente ou procure a recepção."
-            elif not re.fullmatch(r"[A-Za-z0-9._@-]{3,80}",login):
-                erro="Crie um usuário de 3 a 80 caracteres usando letras, números, ponto, hífen, _ ou @."
-            elif len(senha)<8:
-                erro="A senha precisa ter pelo menos 8 caracteres."
-            elif senha!=confirmar:
-                erro="As senhas não coincidem."
-            else:
-                try:
-                    database.salvar_acesso_aluno(pessoa["id"],login,auth_service.hash_senha(senha),True)
-                    _primeiro_acesso_tentativas.pop(ip,None)
-                    database.registrar_log_admin("ALUNO_AUTOATIVOU_APP",str(pessoa["id"]),login,ip)
-                    return redirect(url_for("pagina_login", ativado="1"))
-                except ValueError as exc:
-                    erro=str(exc)
-    return render_template("primeiro_acesso.html",erro=erro)
-
-
-@app.route("/logout")
-def logout():
-    database.registrar_log_admin("LOGOUT", session.get("usuario_login", "-"), "Sessão encerrada.", _ip_cliente())
-    session.clear()
-    return redirect(url_for("pagina_login"))
-
-
-
 
 def enriquecer_pessoa_recepcao(pessoa, dias_alerta=7):
     pessoa = enriquecer_pessoa_plano(pessoa)
@@ -855,7 +722,7 @@ def aluno_app_inicio():
     dados = _dados_app_aluno(pessoa_id)
     if not dados:
         session.clear()
-        return redirect(url_for("pagina_login"))
+        return redirect(url_for("auth.pagina_login"))
     return render_template("aluno_app_inicio.html", **dados)
 
 
