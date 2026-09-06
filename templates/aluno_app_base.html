@@ -14,7 +14,7 @@
 <body class="student-app-v58">
 <header class="student-top-v58">
   <a href="{{ url_for('aluno_app_inicio') }}" class="student-brand-v58"><img src="{{ url_for('static',filename='assets/panobianco-mark-laranja.png') }}" alt=""><span>PANOBIANCO<small>MEU APP</small></span></a>
-  <div class="student-top-actions-v58"><span>{{ session.get('usuario_nome','Aluno').split(' ')[0] }}</span><a href="{{ url_for('logout') }}" class="student-logout-v58">Sair</a></div>
+  <div class="student-top-actions-v58"><span>{{ session.get('usuario_nome','Aluno').split(' ')[0] }}</span><a href="{{ url_for('auth.logout') }}" class="student-logout-v58">Sair</a></div>
 </header>
 <main class="student-main-v58">{% block conteudo %}{% endblock %}</main>
 <nav class="student-bottom-v58 student-bottom-v591">
@@ -24,7 +24,7 @@
   <a href="{{ url_for('aluno_app_evolucao') }}" class="{{ 'active' if request.endpoint=='aluno_app_evolucao' else '' }}"><svg viewBox="0 0 24 24"><path d="m4 17 5-5 3 3 6-7h-3V6h7v7h-2V9.7l-7.8 9.1-3.2-3.2L5.4 19z"/></svg><span>Evolução</span></a>
   <a href="{{ url_for('aluno_app_perfil') }}" class="{{ 'active' if request.endpoint in ['aluno_app_perfil','aluno_app_financeiro'] else '' }}"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0z"/></svg><span>Perfil</span></a>
 </nav>
-<div id="student-toast-v58" class="student-toast-v58"></div>
+<div class="student-top-actions-v58"><span>{{ session.get('usuario_nome','Aluno').split(' ')[0] }}</span><a href="{{ url_for('auth.logout') }}" class="student-logout-v58">Sair</a></div>
 <script>window.STUDENT_CSRF={{ csrf_token|tojson }};</script>
 <script src="{{ url_for('static',filename='js/aluno_app.js',v='5.9.1') }}"></script>
 {% block scripts %}{% endblock %}
