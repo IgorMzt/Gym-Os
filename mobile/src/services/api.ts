@@ -1,6 +1,8 @@
 import { limparTokens, obterAccessToken, obterRefreshToken, salvarTokens } from '@/storage/tokens';
+import { setNetworkState } from '@/services/network-state';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL || '').replace(/\/$/, '');
+const memoriaGet = new Map<string, unknown>();
 
 export class ApiError extends Error {
   status: number;
@@ -38,11 +40,18 @@ async function lerResposta(response: Response) {
 }
 
 export async function apiPublica<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(endpoint(path), {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
-  });
-  return lerResposta(response) as Promise<T>;
+  try {
+    const response = await fetch(endpoint(path), {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+    });
+    setNetworkState('online');
+    return lerResposta(response) as Promise<T>;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    setNetworkState('offline');
+    throw new ApiError('Sem conexão com o Gym OS.', 0, 'SEM_CONEXAO');
+  }
 }
 
 async function renovarAccessToken() {
@@ -57,7 +66,6 @@ async function renovarAccessToken() {
     await salvarTokens(data.access_token, data.refresh_token);
     return data.access_token;
   } catch {
-    await limparTokens();
     return null;
   }
 }
@@ -67,22 +75,36 @@ export async function apiAutenticada<T>(path: string, init: RequestInit = {}, te
   if (!accessToken && tentarRefresh) accessToken = await renovarAccessToken();
   if (!accessToken) throw new ApiError('Sessão expirada.', 401, 'SESSAO_EXPIRADA');
 
-  const response = await fetch(endpoint(path), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...(init.headers || {}),
-    },
-  });
+  const method = String(init.method || 'GET').toUpperCase();
+  try {
+    const response = await fetch(endpoint(path), {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        ...(init.headers || {}),
+      },
+    });
+    setNetworkState('online');
 
-  if (response.status === 401 && tentarRefresh) {
-    const novoAccessToken = await renovarAccessToken();
-    if (!novoAccessToken) throw new ApiError('Sessão expirada.', 401, 'SESSAO_EXPIRADA');
-    return apiAutenticada<T>(path, init, false);
+    if (response.status === 401 && tentarRefresh) {
+      const novoAccessToken = await renovarAccessToken();
+      if (!novoAccessToken) {
+        await limparTokens();
+        throw new ApiError('Sessão expirada.', 401, 'SESSAO_EXPIRADA');
+      }
+      return apiAutenticada<T>(path, init, false);
+    }
+
+    const data = await lerResposta(response) as T;
+    if (method === 'GET') memoriaGet.set(path, data);
+    return data;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    setNetworkState('offline');
+    if (method === 'GET' && memoriaGet.has(path)) return memoriaGet.get(path) as T;
+    throw new ApiError('Você está sem conexão. Tente novamente quando a internet voltar.', 0, 'SEM_CONEXAO');
   }
-
-  return lerResposta(response) as Promise<T>;
 }
 
 export function getApiUrl() {

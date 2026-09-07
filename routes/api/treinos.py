@@ -3,7 +3,7 @@
 from flask import Blueprint, g, jsonify, request
 
 import database
-from services import execution_service
+from services import execution_service, mobile_experience_service
 from .common import aluno_token_obrigatorio, resposta_erro
 
 api_treinos_bp = Blueprint("api_treinos", __name__, url_prefix="/api/v1/aluno")
@@ -112,3 +112,31 @@ def cancelar_execucao(sessao_id):
     if not ok:
         return resposta_erro(erro or "Nao foi possivel cancelar.", 409, "SESSAO_NAO_CANCELADA")
     return jsonify({"sucesso": True})
+
+
+@api_treinos_bp.get("/execucoes/<int:sessao_id>/resumo")
+@aluno_token_obrigatorio
+def resumo_execucao(sessao_id):
+    resumo = mobile_experience_service.resumo_sessao(g.aluno_id, sessao_id)
+    if not resumo:
+        return resposta_erro("Treino concluido nao encontrado.", 404, "RESUMO_NAO_ENCONTRADO")
+    return jsonify({"sucesso": True, "resumo": resumo})
+
+
+@api_treinos_bp.post("/execucoes/<int:sessao_id>/feedback")
+@aluno_token_obrigatorio
+def feedback_execucao(sessao_id):
+    sessao = _sessao_do_aluno(sessao_id)
+    if not sessao or sessao.get("status") != "CONCLUIDO":
+        return resposta_erro("Treino concluido nao encontrado.", 404, "TREINO_NAO_ENCONTRADO")
+    dados = request.get_json(silent=True) or {}
+    try:
+        esforco = int(dados.get("percepcao_esforco"))
+    except (TypeError, ValueError):
+        return resposta_erro("Selecione como foi o treino.", 400, "ESFORCO_INVALIDO")
+    if not 1 <= esforco <= 5:
+        return resposta_erro("A percepcao de esforco deve ficar entre 1 e 5.", 400, "ESFORCO_INVALIDO")
+    comentario = str(dados.get("comentario") or "").strip()[:1000] or None
+    if not database.salvar_feedback_mobile(sessao_id, g.aluno_id, esforco, comentario):
+        return resposta_erro("Nao foi possivel salvar o feedback.", 409, "FEEDBACK_NAO_SALVO")
+    return jsonify({"sucesso": True, "resumo": mobile_experience_service.resumo_sessao(g.aluno_id, sessao_id)})

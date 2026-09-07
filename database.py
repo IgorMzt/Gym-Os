@@ -10,7 +10,7 @@ from typing import Iterable
 import numpy as np
 
 DB_PATH = Path(__file__).parent / "perfis.db"
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 DEFAULT_PLANS = [
     ("Mensal", 11990, 30, "Acesso por 30 dias."),
@@ -649,6 +649,22 @@ def criar_tabelas():
             "CREATE INDEX IF NOT EXISTS idx_mobile_push_pessoa_ativo "
             "ON mobile_push_devices(pessoa_id, ativo)"
         )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobile_aluno_preferencias (
+                pessoa_id INTEGER PRIMARY KEY,
+                meta_semanal INTEGER NOT NULL DEFAULT 4
+                    CHECK (meta_semanal BETWEEN 1 AND 14),
+                lembrete_treino_ativo INTEGER NOT NULL DEFAULT 0,
+                lembrete_treino_hora TEXT NOT NULL DEFAULT '19:00',
+                atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (pessoa_id) REFERENCES pessoas(id) ON DELETE CASCADE
+            )
+            """
+        )
+        _adicionar_coluna(conn, "treino_sessoes", "percepcao_esforco", "INTEGER")
+        _adicionar_coluna(conn, "treino_sessoes", "feedback_mobile", "TEXT")
 
         conn.execute(
             """
@@ -3422,5 +3438,65 @@ def listar_push_devices_pessoa(pessoa_id: int):
         return [dict(r) for r in conn.execute(
             "SELECT * FROM mobile_push_devices WHERE pessoa_id=? AND ativo=1 ORDER BY id DESC", (pessoa_id,)
         ).fetchall()]
+    finally:
+        conn.close()
+
+
+# ---------- Experiencia mobile (Schema 19) ----------
+
+def obter_preferencias_mobile(pessoa_id: int):
+    conn = conectar()
+    try:
+        row = conn.execute(
+            "SELECT * FROM mobile_aluno_preferencias WHERE pessoa_id=?", (pessoa_id,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        return {
+            "pessoa_id": int(pessoa_id),
+            "meta_semanal": 4,
+            "lembrete_treino_ativo": 0,
+            "lembrete_treino_hora": "19:00",
+            "atualizado_em": None,
+        }
+    finally:
+        conn.close()
+
+
+def salvar_preferencias_mobile(pessoa_id: int, meta_semanal: int, lembrete_treino_ativo: bool, lembrete_treino_hora: str):
+    conn = conectar()
+    try:
+        conn.execute(
+            """
+            INSERT INTO mobile_aluno_preferencias(
+                pessoa_id,meta_semanal,lembrete_treino_ativo,lembrete_treino_hora,atualizado_em
+            ) VALUES(?,?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(pessoa_id) DO UPDATE SET
+                meta_semanal=excluded.meta_semanal,
+                lembrete_treino_ativo=excluded.lembrete_treino_ativo,
+                lembrete_treino_hora=excluded.lembrete_treino_hora,
+                atualizado_em=CURRENT_TIMESTAMP
+            """,
+            (pessoa_id, int(meta_semanal), 1 if lembrete_treino_ativo else 0, lembrete_treino_hora),
+        )
+        conn.commit()
+        return obter_preferencias_mobile(pessoa_id)
+    finally:
+        conn.close()
+
+
+def salvar_feedback_mobile(sessao_id: int, pessoa_id: int, percepcao_esforco: int, comentario=None):
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            """
+            UPDATE treino_sessoes
+            SET percepcao_esforco=?, feedback_mobile=?
+            WHERE id=? AND pessoa_id=? AND status='CONCLUIDO'
+            """,
+            (int(percepcao_esforco), comentario, int(sessao_id), int(pessoa_id)),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Href, router } from 'expo-router';
+import Constants from 'expo-constants';
 
 import { StudentShell } from '@/components/student-shell';
 import { studentTheme as t } from '@/constants/student-theme';
@@ -36,6 +37,7 @@ export default function PerfilScreen() {
           <Row label="Vencimento" value={valor(aluno?.data_vencimento)} last />
         </View>
         <Pressable style={styles.finance} onPress={() => router.push('/financeiro' as Href)}><Text style={styles.financeText}>Financeiro</Text><Text style={styles.financeArrow}>→</Text></Pressable>
+        <Pressable style={styles.finance} onPress={() => router.push('/preferencias' as Href)}><View><Text style={styles.financeText}>Preferências</Text><Text style={styles.itemHint}>Meta semanal e lembretes locais</Text></View><Text style={styles.financeArrow}>→</Text></Pressable>
         <Pressable style={styles.finance} onPress={async () => {
           setPushMsg('Ativando...');
           try {
@@ -46,6 +48,7 @@ export default function PerfilScreen() {
           } catch { setPushMsg('Não foi possível enviar a notificação teste.'); }
         }}><Text style={styles.financeText}>Testar notificações</Text><Text style={styles.financeArrow}>→</Text></Pressable>
         {pushMsg ? <Text style={styles.pushMsg}>{pushMsg}</Text> : null}
+        <View style={styles.appInfo}><Text style={styles.appInfoTitle}>GYM OS MOBILE</Text><Text style={styles.appInfoText}>Versão {Constants.expoConfig?.version || '1.0.0'} · experiência V6.8</Text></View>
         <Pressable style={styles.logout} onPress={sair} disabled={saindo}><Text style={styles.logoutText}>{saindo ? 'Saindo...' : 'Sair da conta'}</Text></Pressable>
       </ScrollView>
     </StudentShell>
@@ -63,6 +66,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 18, paddingHorizontal: 16, marginTop: 10 },
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: 1, borderBottomColor: t.line }, rowLast: { borderBottomWidth: 0 }, rowLabel: { color: t.muted, fontSize: 10 }, rowValue: { color: t.text, fontSize: 10, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
   finance: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 16, paddingHorizontal: 16, marginTop: 10 }, financeText: { color: t.text, fontSize: 11, fontWeight: '900' }, financeArrow: { color: t.orange, fontSize: 18, fontWeight: '900' },
-  pushMsg: { color: t.muted, fontSize: 10, textAlign: 'center', marginTop: 8 },
+  pushMsg: { color: t.muted, fontSize: 10, textAlign: 'center', marginTop: 8 }, itemHint: { color: t.muted, fontSize: 8, marginTop: 2 }, appInfo: { alignItems: 'center', paddingTop: 18 }, appInfoTitle: { color: t.muted, fontSize: 7, fontWeight: '900', letterSpacing: 1 }, appInfoText: { color: '#aaa', fontSize: 8, marginTop: 4 },
   logout: { paddingVertical: 19, alignItems: 'center', marginTop: 7 }, logoutText: { color: t.danger, fontSize: 11, fontWeight: '900' },
 });

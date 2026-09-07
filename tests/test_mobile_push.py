@@ -58,8 +58,8 @@ class MobilePushTests(unittest.TestCase):
         database.DB_PATH = self.original_path
         self.tmp.cleanup()
 
-    def test_schema_18(self):
-        self.assertEqual(database.SCHEMA_VERSION, 18)
+    def test_schema_19(self):
+        self.assertEqual(database.SCHEMA_VERSION, 19)
         conn = database.conectar()
         try:
             row = conn.execute(

@@ -1,3 +1,15 @@
+# V6.8 — Experiência Mobile
+
+- Schema 19 com preferências do aluno e feedback pós-treino.
+- Home inteligente com meta semanal, streak, volume, recordes e conquistas.
+- Próximo treino e sessão em andamento conectados diretamente à Home.
+- Resumo pós-treino com duração, volume e percepção de esforço de 1 a 5.
+- Meta semanal configurável e lembrete local diário de treino.
+- Indicador offline e cache em memória para GETs já carregados durante a sessão.
+- Skeletons, pull-to-refresh e estados de erro/sem conexão aprimorados.
+- Perfil com Preferências e informações da versão mobile.
+- Quatro novos testes automatizados da experiência mobile.
+
 # V6.7 — Notificações Push
 
 - Schema 18 com dispositivos push por aluno.

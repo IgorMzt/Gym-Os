@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** versão 5.9.1, em preparação para a arquitetura de produção da V6.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`, com app mobile React Native/Expo e API v1.
 
 ## Visão geral
 
@@ -20,6 +20,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 - **Avaliações físicas** com peso, altura, IMC, composição corporal, medidas, fotos e evolução histórica.
 - **Financeiro** com planos, vencimentos, tolerância configurável e cobrança PIX via Asaas Sandbox/webhook.
 - **PWA do aluno** com primeiro acesso, treino, histórico, evolução, financeiro, perfil e alteração de senha.
+- **App mobile do aluno** em React Native/Expo com autenticação por token, treino real, histórico, evolução, financeiro, notificações, metas semanais, feedback pós-treino e experiência offline básica.
 - **Dashboard operacional** com indicadores, alertas e busca global de alunos.
 - **Segurança operacional** com papéis/permissões, sessões, CSRF, rate limiting de login, logs administrativos, backups, diagnóstico e verificações de integridade.
 
