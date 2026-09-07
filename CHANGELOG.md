@@ -1,3 +1,12 @@
+# V6.7 — Notificações Push
+
+- Schema 18 com dispositivos push por aluno.
+- Registro e remoção de Expo Push Token via API mobile.
+- Expo Notifications + Development Build/EAS.
+- Deep links de notificações para Treino e Financeiro.
+- Push automático para nova ficha ativa, pagamento confirmado e mensalidade vencida.
+- Endpoint e botão de teste no Perfil.
+
 # Changelog
 
 ## V6.6 — Financeiro completo no mobile

@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -89,6 +89,11 @@ def api_criar_ficha_treino():
             return jsonify({"sucesso": False, "erro": "Sem permissão para este aluno."}), 403
         ficha_id = database.criar_ficha_treino(dados, int(session.get("usuario_id")))
         database.registrar_log_admin("FICHA_TREINO_CRIADA", str(ficha_id), dados["nome"], _ip_cliente())
+        if dados.get("ativo", True):
+            push_service.enviar_para_aluno(
+                dados["pessoa_id"], "Novo treino disponível",
+                f"Sua ficha {dados['nome']} foi liberada.", {"url": "/treino", "tipo": "NOVA_FICHA"}
+            )
         return jsonify({"sucesso": True, "id": ficha_id})
     except ValueError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

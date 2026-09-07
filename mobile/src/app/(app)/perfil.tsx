@@ -6,12 +6,14 @@ import { StudentShell } from '@/components/student-shell';
 import { studentTheme as t } from '@/constants/student-theme';
 import { useAuth } from '@/context/auth-context';
 import { logoutAluno } from '@/services/auth';
+import { enviarPushTeste, registrarPushNoBackend } from '@/services/notificacoes';
 
 function valor(v?: string | null) { return v || '—'; }
 
 export default function PerfilScreen() {
   const { aluno, definirAluno } = useAuth();
   const [saindo, setSaindo] = useState(false);
+  const [pushMsg, setPushMsg] = useState('');
   const inicial = (aluno?.nome || 'A').trim().charAt(0).toUpperCase();
 
   async function sair() {
@@ -34,6 +36,16 @@ export default function PerfilScreen() {
           <Row label="Vencimento" value={valor(aluno?.data_vencimento)} last />
         </View>
         <Pressable style={styles.finance} onPress={() => router.push('/financeiro' as Href)}><Text style={styles.financeText}>Financeiro</Text><Text style={styles.financeArrow}>→</Text></Pressable>
+        <Pressable style={styles.finance} onPress={async () => {
+          setPushMsg('Ativando...');
+          try {
+            const token = await registrarPushNoBackend();
+            if (!token) { setPushMsg('Push requer Development Build/EAS e permissão ativa.'); return; }
+            await enviarPushTeste();
+            setPushMsg('Notificação teste enviada.');
+          } catch { setPushMsg('Não foi possível enviar a notificação teste.'); }
+        }}><Text style={styles.financeText}>Testar notificações</Text><Text style={styles.financeArrow}>→</Text></Pressable>
+        {pushMsg ? <Text style={styles.pushMsg}>{pushMsg}</Text> : null}
         <Pressable style={styles.logout} onPress={sair} disabled={saindo}><Text style={styles.logoutText}>{saindo ? 'Saindo...' : 'Sair da conta'}</Text></Pressable>
       </ScrollView>
     </StudentShell>
@@ -51,5 +63,6 @@ const styles = StyleSheet.create({
   card: { backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 18, paddingHorizontal: 16, marginTop: 10 },
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: 1, borderBottomColor: t.line }, rowLast: { borderBottomWidth: 0 }, rowLabel: { color: t.muted, fontSize: 10 }, rowValue: { color: t.text, fontSize: 10, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
   finance: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 16, paddingHorizontal: 16, marginTop: 10 }, financeText: { color: t.text, fontSize: 11, fontWeight: '900' }, financeArrow: { color: t.orange, fontSize: 18, fontWeight: '900' },
+  pushMsg: { color: t.muted, fontSize: 10, textAlign: 'center', marginTop: 8 },
   logout: { paddingVertical: 19, alignItems: 'center', marginTop: 7 }, logoutText: { color: t.danger, fontSize: 11, fontWeight: '900' },
 });

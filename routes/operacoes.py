@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -176,6 +176,16 @@ def webhook_asaas():
 
         if cobranca:
             database.registrar_log_admin(acao, str(cobranca["pessoa_id"]), f"{evento}:{payment_id}", _ip_cliente())
+            if evento in {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}:
+                push_service.enviar_para_aluno(
+                    cobranca["pessoa_id"], "Pagamento confirmado",
+                    "Seu pagamento foi confirmado. Obrigado!", {"url": "/financeiro", "tipo": "PAGAMENTO_CONFIRMADO"}
+                )
+            elif evento == "PAYMENT_OVERDUE":
+                push_service.enviar_para_aluno(
+                    cobranca["pessoa_id"], "Mensalidade vencida",
+                    "Sua mensalidade venceu. Consulte o Financeiro no Gym OS.", {"url": "/financeiro", "tipo": "MENSALIDADE_VENCIDA"}
+                )
         database.concluir_evento_webhook(event_id)
         return jsonify({"ok": True})
     except Exception as exc:

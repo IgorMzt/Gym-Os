@@ -3,6 +3,7 @@ import { createContext, PropsWithChildren, useContext, useEffect, useState } fro
 import { obterAlunoAtual } from '@/services/auth';
 import { limparTokens, obterRefreshToken } from '@/storage/tokens';
 import type { AlunoDetalhes } from '@/types/auth';
+import { registrarPushNoBackend } from '@/services/notificacoes';
 
 type AuthContextValue = {
   carregando: boolean;
@@ -22,6 +23,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const data = await obterAlunoAtual();
       setAluno(data.aluno);
+      registrarPushNoBackend().catch(() => undefined);
       return data.aluno;
     } catch {
       await limparTokens();

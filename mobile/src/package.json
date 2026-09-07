@@ -6,13 +6,11 @@
     "@expo/ui": "~57.0.16",
     "expo": "~57.0.20",
     "expo-constants": "~57.0.17",
-    "expo-dev-client": "~57.0.18",
     "expo-device": "~57.0.1",
     "expo-font": "~57.0.3",
     "expo-glass-effect": "~57.0.1",
     "expo-image": "~57.0.4",
     "expo-linking": "~57.0.9",
-    "expo-notifications": "~57.0.17",
     "expo-router": "~57.0.19",
     "expo-secure-store": "~57.0.3",
     "expo-splash-screen": "~57.0.8",
@@ -28,7 +26,9 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "expo-notifications": "~57.0.17",
+    "expo-dev-client": "~57.0.18"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

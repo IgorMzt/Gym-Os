@@ -10,7 +10,7 @@ from typing import Iterable
 import numpy as np
 
 DB_PATH = Path(__file__).parent / "perfis.db"
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 DEFAULT_PLANS = [
     ("Mensal", 11990, 30, "Acesso por 30 dias."),
@@ -626,6 +626,28 @@ def criar_tabelas():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_mobile_refresh_ativo "
             "ON mobile_refresh_tokens(aluno_acesso_id, revoked_at, expires_at)"
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mobile_push_devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pessoa_id INTEGER NOT NULL,
+                expo_push_token TEXT NOT NULL UNIQUE,
+                plataforma TEXT,
+                device_name TEXT,
+                app_version TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (pessoa_id) REFERENCES pessoas(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mobile_push_pessoa_ativo "
+            "ON mobile_push_devices(pessoa_id, ativo)"
         )
 
         conn.execute(
@@ -3347,3 +3369,58 @@ def metricas_professor(professor_id:int):
             WHERE s.status='EM_ANDAMENTO'""",(professor_id,)).fetchone()[0])
         return {"total":total,"sem_ficha":sem_ficha,"sem_avaliacao_60":sem_avaliacao,"treinando":treinando}
     finally: conn.close()
+
+
+# ---------- Push notifications mobile (Schema 18) ----------
+
+def registrar_push_device(pessoa_id: int, expo_push_token: str, plataforma=None, device_name=None, app_version=None):
+    token = str(expo_push_token or "").strip()
+    if not token:
+        raise ValueError("Push token obrigatorio.")
+    conn = conectar()
+    try:
+        conn.execute(
+            """
+            INSERT INTO mobile_push_devices(pessoa_id,expo_push_token,plataforma,device_name,app_version,ativo)
+            VALUES(?,?,?,?,?,1)
+            ON CONFLICT(expo_push_token) DO UPDATE SET
+              pessoa_id=excluded.pessoa_id, plataforma=excluded.plataforma,
+              device_name=excluded.device_name, app_version=excluded.app_version,
+              ativo=1, last_seen_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+            """,
+            (pessoa_id, token, plataforma, device_name, app_version),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM mobile_push_devices WHERE expo_push_token=?", (token,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def desativar_push_device(pessoa_id: int, expo_push_token: str):
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            "UPDATE mobile_push_devices SET ativo=0,updated_at=CURRENT_TIMESTAMP WHERE pessoa_id=? AND expo_push_token=?",
+            (pessoa_id, str(expo_push_token or "").strip()),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+def desativar_push_token(expo_push_token: str):
+    conn = conectar()
+    try:
+        conn.execute("UPDATE mobile_push_devices SET ativo=0,updated_at=CURRENT_TIMESTAMP WHERE expo_push_token=?", (expo_push_token,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def listar_push_devices_pessoa(pessoa_id: int):
+    conn = conectar()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM mobile_push_devices WHERE pessoa_id=? AND ativo=1 ORDER BY id DESC", (pessoa_id,)
+        ).fetchall()]
+    finally:
+        conn.close()

@@ -1,6 +1,7 @@
 import { apiAutenticada, apiPublica } from '@/services/api';
 import { limparTokens, obterRefreshToken, salvarTokens } from '@/storage/tokens';
 import type { LoginResponse, MeResponse } from '@/types/auth';
+import { removerPushDoBackend } from '@/services/notificacoes';
 
 export async function loginAluno(login: string, senha: string) {
   const data = await apiPublica<LoginResponse>('/api/v1/auth/login', {
@@ -18,6 +19,7 @@ export async function obterAlunoAtual() {
 export async function logoutAluno() {
   const refreshToken = await obterRefreshToken();
   try {
+    await removerPushDoBackend().catch(() => undefined);
     if (refreshToken) {
       await apiAutenticada('/api/v1/auth/logout', {
         method: 'POST',
