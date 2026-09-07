@@ -1,3 +1,14 @@
+# Changelog
+
+## V6.5 — Histórico e evolução no mobile
+
+- API mobile de histórico de treinos, estatísticas e detalhe de sessão.
+- API mobile de avaliações físicas, comparação com a avaliação anterior e detalhe.
+- Tela nativa de Histórico com KPIs, sessões concluídas, cargas recentes e detalhe de cada treino.
+- Tela nativa de Evolução com última avaliação, deltas, mini gráfico e linha do tempo de avaliações.
+- Mantém o schema 17; nenhuma migração de banco é necessária.
+- Novos testes de API mobile para histórico/evolução.
+
 ## V6.4 - em desenvolvimento
 - Treinos reais expostos na API mobile com ficha ativa e próximo treino.
 - Execução de treino no app com séries, repetições, carga, observações e última execução.

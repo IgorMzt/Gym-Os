@@ -47,7 +47,7 @@ from routes.treinos import treinos_bp
 from routes.exercicios import exercicios_bp
 from routes.usuarios import usuarios_bp
 from routes.operacoes import operacoes_bp
-from routes.api import api_auth_bp, api_aluno_bp, api_treinos_bp
+from routes.api import api_auth_bp, api_aluno_bp, api_treinos_bp, api_historico_bp, api_evolucao_bp
 from routes.common import ADMIN_USER, ADMIN_PASSWORD, CREDENCIAL_PADRAO
 from validators import cpf_apenas_digitos, cpf_valido, data_iso, email_valido, parse_bool, parse_float, parse_int
 
@@ -165,6 +165,8 @@ app.register_blueprint(operacoes_bp)
 app.register_blueprint(api_auth_bp)
 app.register_blueprint(api_aluno_bp)
 app.register_blueprint(api_treinos_bp)
+app.register_blueprint(api_historico_bp)
+app.register_blueprint(api_evolucao_bp)
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0").strip().lower() in {"1", "true", "sim", "on"}

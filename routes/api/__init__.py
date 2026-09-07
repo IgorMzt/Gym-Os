@@ -3,5 +3,13 @@
 from .auth import api_auth_bp
 from .aluno import api_aluno_bp
 from .treinos import api_treinos_bp
+from .historico import api_historico_bp
+from .evolucao import api_evolucao_bp
 
-__all__ = ["api_auth_bp", "api_aluno_bp", "api_treinos_bp"]
+__all__ = [
+    "api_auth_bp",
+    "api_aluno_bp",
+    "api_treinos_bp",
+    "api_historico_bp",
+    "api_evolucao_bp",
+]
