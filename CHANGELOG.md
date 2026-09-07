@@ -1,3 +1,8 @@
+## V6.4 - em desenvolvimento
+- Treinos reais expostos na API mobile com ficha ativa e próximo treino.
+- Execução de treino no app com séries, repetições, carga, observações e última execução.
+- Cronômetro de descanso com +15s e pular, conclusão e cancelamento de sessão.
+
 ## V6.3 - em desenvolvimento
 - Início do aplicativo mobile do aluno com React Native, TypeScript, Expo e Expo Router.
 - Login mobile conectado à API v1, com tokens persistidos no Expo SecureStore.
