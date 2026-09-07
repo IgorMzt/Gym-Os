@@ -1,3 +1,13 @@
+## V6.3 - em desenvolvimento
+- Início do aplicativo mobile do aluno com React Native, TypeScript, Expo e Expo Router.
+- Login mobile conectado à API v1, com tokens persistidos no Expo SecureStore.
+- Sessão persistente com renovação automática do access token via refresh token rotativo.
+- Home inicial do aluno consumindo `GET /api/v1/aluno/me`.
+- Logout mobile com revogação do refresh token e limpeza do armazenamento seguro.
+- Servidor de desenvolvimento Flask preparado para acesso do celular na rede local.
+- Interface mobile alinhada à identidade do PWA do aluno: fundo claro, cabeçalho preto, laranja Panobianco e navegação inferior de cinco áreas.
+- Estrutura visual inicial de Histórico, Treino, Evolução e Perfil adicionada para receber os próximos endpoints da API.
+
 ## V6.2 - em desenvolvimento
 
 - Adicionada base da API REST mobile em `/api/v1`.

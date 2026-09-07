@@ -167,4 +167,4 @@ app.register_blueprint(api_aluno_bp)
 
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0").strip().lower() in {"1", "true", "sim", "on"}
-    app.run(debug=debug, port=int(os.getenv("PORT", "5000")))
+    app.run(host=os.getenv("HOST", "0.0.0.0"), debug=debug, port=int(os.getenv("PORT", "5000")))
