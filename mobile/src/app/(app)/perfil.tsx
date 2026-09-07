@@ -33,6 +33,7 @@ export default function PerfilScreen() {
           <Row label="Plano" value={valor(aluno?.plano)} />
           <Row label="Vencimento" value={valor(aluno?.data_vencimento)} last />
         </View>
+        <Pressable style={styles.finance} onPress={() => router.push('/financeiro' as Href)}><Text style={styles.financeText}>Financeiro</Text><Text style={styles.financeArrow}>→</Text></Pressable>
         <Pressable style={styles.logout} onPress={sair} disabled={saindo}><Text style={styles.logoutText}>{saindo ? 'Saindo...' : 'Sair da conta'}</Text></Pressable>
       </ScrollView>
     </StudentShell>
@@ -49,5 +50,6 @@ const styles = StyleSheet.create({
   name: { color: t.text, fontSize: 22, fontWeight: '900', marginTop: 10 }, meta: { color: t.muted, fontSize: 10, marginTop: 3 },
   card: { backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 18, paddingHorizontal: 16, marginTop: 10 },
   row: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: 1, borderBottomColor: t.line }, rowLast: { borderBottomWidth: 0 }, rowLabel: { color: t.muted, fontSize: 10 }, rowValue: { color: t.text, fontSize: 10, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
+  finance: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: t.card, borderWidth: 1, borderColor: t.line, borderRadius: 16, paddingHorizontal: 16, marginTop: 10 }, financeText: { color: t.text, fontSize: 11, fontWeight: '900' }, financeArrow: { color: t.orange, fontSize: 18, fontWeight: '900' },
   logout: { paddingVertical: 19, alignItems: 'center', marginTop: 7 }, logoutText: { color: t.danger, fontSize: 11, fontWeight: '900' },
 });

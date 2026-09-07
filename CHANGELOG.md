@@ -1,5 +1,14 @@
 # Changelog
 
+## V6.6 — Financeiro completo no mobile
+
+- API bearer-token do financeiro do aluno com status efetivo, plano, vencimento, tolerância e histórico de cobranças.
+- Geração/reutilização de cobrança PIX via integração Asaas já existente.
+- Tela nativa Financeiro com QR Code, PIX copia e cola selecionável e histórico.
+- Atalhos para Financeiro na Home e no Perfil.
+- Mantém o schema 17; nenhuma migração de banco é necessária.
+- Novos testes da API financeira mobile.
+
 ## V6.5 — Histórico e evolução no mobile
 
 - API mobile de histórico de treinos, estatísticas e detalhe de sessão.

@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Href, router } from 'expo-router';
 
 import { StudentShell } from '@/components/student-shell';
 import { studentTheme as t } from '@/constants/student-theme';
@@ -43,14 +44,14 @@ export default function HomeScreen() {
           <View style={styles.stat}><Text style={styles.statLabel}>ÚLTIMO PESO</Text><Text style={styles.statValueSmall}>—</Text><Text style={styles.statHint}>avaliação física</Text></View>
         </View>
 
-        <View style={styles.financeCard}>
+        <Pressable style={styles.financeCard} onPress={() => router.push('/financeiro' as Href)}>
           <View>
             <Text style={styles.eyebrow}>FINANCEIRO</Text>
             <Text style={styles.financeTitle}>{formatarStatus(aluno?.status_financeiro)}</Text>
             <Text style={styles.financeText}>Vencimento {dataBr(aluno?.data_vencimento)}</Text>
           </View>
           <Text style={styles.arrow}>→</Text>
-        </View>
+        </Pressable>
 
         <View style={styles.section}>
           <Text style={styles.eyebrow}>ATIVIDADE</Text>
