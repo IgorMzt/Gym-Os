@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`, com app mobile React Native/Expo e API v1.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A V6.9 adiciona preparação de produção/cloud, app factory, health/readiness, storage abstrato e a base do agente local.
 
 ## Visão geral
 
@@ -29,7 +29,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 | Camada | Tecnologia |
 | --- | --- |
 | Backend | Python 3.11 + Flask |
-| Banco | SQLite |
+| Banco | SQLite (PostgreSQL preparado para a V6.10) |
 | Visão computacional | OpenCV + face_recognition + dlib |
 | Frontend | HTML, CSS e JavaScript vanilla |
 | PWA | Web App Manifest + Service Worker |
@@ -40,7 +40,11 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 
 ```text
 .
-├── app.py                     # Aplicação Flask, páginas e endpoints
+├── app.py                     # App factory Flask e bootstrap de runtime
+├── wsgi.py                    # Entrada WSGI para ambiente Linux/cloud
+├── manage.py                  # check-config e init-db
+├── core/                      # Configuração e logging por ambiente
+├── agent/                     # Base do futuro agente local (heartbeat)
 ├── database.py                # Schema, migrations e persistência SQLite
 ├── config_service.py          # Configurações operacionais
 ├── device_manager.py          # Integração/abstração dos dispositivos de acesso
@@ -67,6 +71,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 │   └── sw.js
 ├── tests/                     # Testes automatizados do núcleo
 ├── requirements.txt
+├── requirements-prod.txt      # Dependências adicionais de produção
 ├── install_windows.ps1
 ├── .env.example              # Modelo público, sem segredos
 ├── .env                      # Local e ignorado pelo Git
@@ -103,19 +108,21 @@ python -c "import dlib, face_recognition, cv2, numpy; print('dlib:', dlib.__vers
 
 O projeto carrega automaticamente o arquivo `.env` da raiz usando `python-dotenv`. No pacote local há um `.env` pronto para edição e o Git o ignora; no repositório deve existir apenas o `.env.example`.
 
-Edite estas variáveis antes de usar:
+A V6.9 separa configuração de ambiente e papel de execução. Para desenvolvimento local, os valores principais são:
 
 ```env
+APP_ENV=development
+APP_ROLE=local
 SECRET_KEY=uma-chave-aleatoria-longa
 ADMIN_USER=admin
 ADMIN_PASSWORD=sua-senha-forte
 FLASK_DEBUG=0
-PORT=5000
-
-ASAAS_BASE_URL=https://api-sandbox.asaas.com/v3
-ASAAS_API_KEY=sua-chave-sandbox
-ASAAS_WEBHOOK_TOKEN=seu-token-de-webhook
+DATABASE_BACKEND=sqlite
+STORAGE_BACKEND=local
+ENABLE_LOCAL_HARDWARE=1
 ```
+
+O `.env.example` documenta também proxy seguro, logging, storage, `DATABASE_URL` reservado para a V6.10 e o canal do agente local.
 
 `SECRET_KEY` e `ASAAS_WEBHOOK_TOKEN` já podem ser gerados aleatoriamente no seu `.env` local. Você deve trocar `ADMIN_PASSWORD` e preencher `ASAAS_API_KEY`. Se preferir recriar o arquivo a partir do modelo:
 
@@ -140,6 +147,35 @@ http://localhost:5000
 ```
 
 A primeira inicialização cria/migra o banco `perfis.db` automaticamente.
+
+
+## Preparação de produção — V6.9
+
+Antes de qualquer deploy, valide o ambiente:
+
+```powershell
+python manage.py check-config
+```
+
+Em produção, a aplicação recusa `SECRET_KEY` fraca, senha administrativa padrão e `FLASK_DEBUG=1`. Quando `AUTO_INIT_DB=0`, inicialize/migre explicitamente:
+
+```powershell
+python manage.py init-db
+```
+
+Health checks:
+
+```text
+GET /health/live   # processo Flask vivo
+GET /health/ready  # banco, storage e bloqueios arquiteturais
+GET /health        # compatibilidade com o health check anterior
+```
+
+A configuração `APP_ROLE=cloud` desativa operações de hardware local. Enquanto PostgreSQL e object storage ainda não estiverem ativos, `/health/ready` aponta os bloqueios `database_postgresql_pendente` e `storage_objeto_pendente`. Isso é intencional na V6.9 e será resolvido na V6.10.
+
+O diretório `agent/` já possui um heartbeat autenticado para preparar a separação do computador da academia. Câmera, reconhecimento facial e catraca só serão movidos efetivamente para esse processo na V6.11.
+
+Para um futuro servidor Linux/cloud, existe `wsgi.py` e `requirements-prod.txt`. O servidor de desenvolvimento `python app.py` continua sendo o fluxo local.
 
 ## Perfis de acesso
 
@@ -199,7 +235,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V5.9.1 ainda é uma arquitetura local/monolítica. Antes de operação pública em escala, a V6 deverá priorizar separação de rotas/repositórios, PostgreSQL, configuração de produção, servidor WSGI, domínio/HTTPS permanente, observabilidade, estratégia de backup e revisão específica do tratamento biométrico.
+A V6.9 já introduz configuração de produção, app factory, WSGI, health/readiness, logging, storage abstrato e a base do agente local. Ainda **não é o momento de colocar o backend central em produção**: o banco efetivo continua SQLite e o storage efetivo continua local até a V6.10; câmera, biometria e catraca continuam no processo local atual até a V6.11.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -207,13 +243,12 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 
 ### V6
 
-- modularização do backend em Blueprints e repositories;
-- migração SQLite → PostgreSQL;
-- configuração de produção e deploy;
-- API mais bem delimitada;
-- domínio e HTTPS permanentes;
-- observabilidade e backups de produção;
-- preparação para múltiplas unidades/SaaS.
+- V6.1–V6.8: modularização, API mobile, app Expo, treinos, histórico, evolução, financeiro, push e experiência mobile;
+- **V6.9: preparação de produção/cloud e base do agente local**;
+- V6.10: migração SQLite → PostgreSQL + object storage/infraestrutura cloud;
+- V6.11: agente local com câmera, reconhecimento facial e catraca;
+- V6.12: hardening, observabilidade, backups e testes finais de produção;
+- release V6.0: merge `develop` → `main` após validação completa.
 
 ## Identidade visual
 

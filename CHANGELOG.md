@@ -137,3 +137,20 @@
 - carregamento local de `.env` com `python-dotenv`;
 - `.env.example` sanitizado;
 - segredos, banco, uploads e artefatos de runtime ignorados pelo Git.
+
+## V6.9 — Preparação Cloud/Produção
+
+- App factory `create_app()` mantendo compatibilidade com `python app.py`.
+- Configuração central por `APP_ENV` e `APP_ROLE`.
+- Validação fail-fast de segredos, senha administrativa e debug em produção.
+- `ProxyFix`, cookie seguro/HSTS configuráveis e `X-Request-ID` em respostas.
+- Logging central com stdout e rotação opcional em disco.
+- `wsgi.py`, `requirements-prod.txt` e comandos `manage.py check-config/init-db`.
+- Health checks `/health/live`, `/health/ready` e compatibilidade `/health`.
+- Readiness explicita as pendências PostgreSQL/object storage antes do deploy cloud.
+- Abstração inicial de uploads em `services/storage_service.py` sem alterar o formato existente `uploads/...`.
+- `DATABASE_BACKEND`, `DATABASE_URL` e `SQLITE_PATH` preparados para a V6.10; SQLite continua efetivo nesta etapa.
+- Operações de catraca/biometria marcadas como locais quando `APP_ROLE=cloud`.
+- Base do agente local em `agent/`, com heartbeat autenticado em `/api/v1/agent/heartbeat`.
+- Schema permanece **19**; V6.9 é arquitetural e não exige migração de dados.
+- 5 testes adicionais para configuração de produção, readiness, storage e agente local.

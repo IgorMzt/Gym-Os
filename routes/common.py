@@ -18,6 +18,7 @@ from flask import request, session, url_for
 import config_service
 import database
 from validators import cpf_apenas_digitos, cpf_valido, data_iso, email_valido, parse_bool, parse_float, parse_int
+from services import storage_service
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "static" / "uploads"
@@ -117,8 +118,6 @@ def decodificar_imagem(data_url):
 
 
 def salvar_foto(dados_binarios):
-    nome_arquivo = f"{uuid.uuid4().hex}.jpg"
-    caminho = UPLOAD_DIR / nome_arquivo
     array = np.frombuffer(dados_binarios, dtype=np.uint8)
     imagem = cv2.imdecode(array, cv2.IMREAD_COLOR)
     if imagem is None:
@@ -126,19 +125,11 @@ def salvar_foto(dados_binarios):
     ok, encoded = cv2.imencode(".jpg", imagem, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
     if not ok:
         raise ValueError("Nao foi possivel salvar a foto.")
-    caminho.write_bytes(encoded.tobytes())
-    return f"uploads/{nome_arquivo}"
+    return storage_service.salvar_upload(encoded.tobytes(), ".jpg")
 
 
 def limpar_foto(foto_path):
-    if not foto_path:
-        return
-    caminho = BASE_DIR / "static" / foto_path
-    try:
-        if caminho.exists():
-            caminho.unlink()
-    except OSError:
-        pass
+    storage_service.remover_upload(foto_path)
 
 
 def formatar_cpf(cpf):

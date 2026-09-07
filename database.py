@@ -1,6 +1,7 @@
 """Camada de persistencia do controle de acesso da academia."""
 
 import json
+import os
 import sqlite3
 import shutil
 from datetime import date, datetime, timedelta, timezone
@@ -9,8 +10,23 @@ from typing import Iterable
 
 import numpy as np
 
-DB_PATH = Path(__file__).parent / "perfis.db"
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 SCHEMA_VERSION = 19
+
+
+def configure_runtime(settings) -> None:
+    """Aplica somente configuracoes suportadas pela camada SQLite atual.
+
+    DATABASE_BACKEND=postgresql e DATABASE_URL sao reconhecidos pela camada de
+    configuracao na V6.9, mas a troca efetiva de driver fica para a V6.10.
+    """
+    global DB_PATH
+    if settings.database_backend != "sqlite":
+        raise RuntimeError("PostgreSQL sera ativado na V6.10; use DATABASE_BACKEND=sqlite na V6.9.")
+    DB_PATH = settings.sqlite_file(BASE_DIR)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 
 DEFAULT_PLANS = [
     ("Mensal", 11990, 30, "Acesso por 30 dias."),

@@ -36,3 +36,13 @@ Se este repositório se tornar público, configure um canal privado de contato p
 ## Variáveis de ambiente
 
 A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve permanecer fora do controle de versão. Publique apenas `.env.example`, sem chaves, tokens ou senhas reais.
+
+## V6.9 — produção e separação local/cloud
+
+- `APP_ENV=production` rejeita `SECRET_KEY` insegura, `ADMIN_PASSWORD` padrão e debug ativo.
+- Em produção, use HTTPS e `SESSION_COOKIE_SECURE=1`; ao operar atrás de proxy confiável, habilite `TRUST_PROXY=1` apenas para a quantidade real de proxies em `PROXY_HOPS`.
+- `AGENT_API_TOKEN` é segredo e deve existir somente no backend central e no computador autorizado da academia. Nunca versione esse token.
+- O endpoint do agente usa token estático apenas como fundação da V6.9. Antes de múltiplas unidades/SaaS, adote rotação/revogação por agente e credenciais individualizadas.
+- `DATABASE_URL` e credenciais de object storage nunca devem entrar no Git; o `.env.example` contém somente placeholders.
+- `/health/ready` não expõe segredos e deve permanecer útil para orquestração/monitoramento.
+- O papel `cloud` não deve executar câmera, reconhecimento facial nem acionar catraca. A separação física completa desses componentes será concluída na V6.11.

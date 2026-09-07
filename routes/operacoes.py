@@ -21,6 +21,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, redirect, re
 from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
+from services.runtime_service import local_only
 import database
 import config_service
 import device_manager
@@ -38,17 +39,20 @@ from routes.common import (
 operacoes_bp = Blueprint("operacoes", __name__)
 
 @operacoes_bp.route("/catraca")
+@local_only
 def pagina_catraca():
     return render_template("verificacao.html", config_catraca=dados_config_catraca())
 
 
 @operacoes_bp.route("/verificacao")
+@local_only
 def pagina_verificacao():
     return redirect(url_for("operacoes.pagina_catraca"))
 
 
 @operacoes_bp.route("/cadastro")
 @papel_requerido("ADMIN","RECEPCAO")
+@local_only
 def pagina_cadastro():
     return render_template("cadastro.html", hoje=date.today().isoformat(), planos=database.listar_planos(True), cadastro_redirect_ms=max(0, min(30000, cfg_int("cadastro_redirect_ms", 3000))), cadastro_preparacao_captura_ms=max(0, min(5000, cfg_int("cadastro_preparacao_captura_ms", 550))), cadastro_intervalo_captura_ms=max(0, min(5000, cfg_int("cadastro_intervalo_captura_ms", 450))))
 
@@ -217,11 +221,13 @@ def pagina_configuracoes():
 # ---------- APIs da catraca ----------
 
 @operacoes_bp.route("/api/config/catraca")
+@local_only
 def api_config_catraca():
     return jsonify({"sucesso": True, "config": dados_config_catraca()})
 
 
 @operacoes_bp.route("/api/presenca", methods=["POST"])
+@local_only
 def api_presenca():
     """Deteccao leve de rosto usada apenas para rearmar a proxima leitura.
 
@@ -241,6 +247,7 @@ def api_presenca():
 
 
 @operacoes_bp.route("/api/verificar", methods=["POST"])
+@local_only
 def api_verificar():
     dados = request.get_json(silent=True) or {}
     imagem_base64 = dados.get("imagem")
@@ -317,6 +324,7 @@ def api_verificar():
 
 @operacoes_bp.route("/api/catracas/<int:catraca_id>/testar", methods=["POST"])
 @papel_requerido("ADMIN")
+@local_only
 def api_testar_catraca(catraca_id):
     """Teste administrativo; nunca e chamado pelo navegador da catraca."""
     catraca = database.obter_catraca(catraca_id)
@@ -337,6 +345,7 @@ def api_busca_global():
 
 @operacoes_bp.route("/api/cadastrar", methods=["POST"])
 @papel_requerido("ADMIN","RECEPCAO")
+@local_only
 def api_cadastrar():
     dados = request.get_json(silent=True) or {}
     imagens = dados.get("imagens") or []
@@ -416,6 +425,7 @@ def api_renovar(pessoa_id):
 
 @operacoes_bp.route("/api/pessoas/<int:pessoa_id>/biometria", methods=["POST"])
 @papel_requerido("ADMIN","RECEPCAO")
+@local_only
 def api_biometria(pessoa_id):
     pessoa = database.obter_pessoa(pessoa_id)
     if not pessoa:
@@ -641,19 +651,6 @@ def api_criar_catraca():
 def _filtros_historico_request():
     return filtros_historico_seguros(request.args)
 
-
-
-@operacoes_bp.route("/health")
-def health():
-    try:
-        integridade = database.verificar_integridade()
-        return jsonify({
-            "status": "ok" if integridade["ok"] else "degradado",
-            "database": "ok" if integridade["ok"] else "erro",
-            "schema_version": integridade["schema_version"],
-        }), 200 if integridade["ok"] else 503
-    except Exception:
-        return jsonify({"status": "erro", "database": "indisponivel"}), 503
 
 
 @operacoes_bp.route("/diagnostico")

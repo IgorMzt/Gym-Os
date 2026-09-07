@@ -8,6 +8,7 @@ from .evolucao import api_evolucao_bp
 from .financeiro import api_financeiro_bp
 from .notificacoes import api_notificacoes_bp
 from .experiencia import api_experiencia_bp
+from .agent import api_agent_bp
 
 __all__ = [
     "api_auth_bp",
@@ -18,4 +19,5 @@ __all__ = [
     "api_financeiro_bp",
     "api_notificacoes_bp",
     "api_experiencia_bp",
+    "api_agent_bp",
 ]

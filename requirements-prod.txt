@@ -1,0 +1,3 @@
+-r requirements.txt
+# Servidor WSGI para ambiente Linux/cloud. O Flask dev server continua apenas para desenvolvimento.
+gunicorn>=22,<24
