@@ -137,6 +137,8 @@ def obter_dashboard() -> dict:
 
     conn = database.conectar()
     try:
+        inicio_dia = datetime.combine(hoje, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
+        fim_dia = datetime.combine(hoje + timedelta(days=1), datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
         resumo_logs = conn.execute(
             """
             SELECT COUNT(*) total,
@@ -144,8 +146,9 @@ def obter_dashboard() -> dict:
                    SUM(CASE WHEN status='BLOQUEADO' THEN 1 ELSE 0 END) bloqueados,
                    SUM(CASE WHEN status='NEGADO' THEN 1 ELSE 0 END) negados
             FROM logs_acesso
-            WHERE date(data_hora)=date('now','localtime')
-            """
+            WHERE data_hora>=? AND data_hora<?
+            """,
+            (inicio_dia, fim_dia),
         ).fetchone()
 
         entradas_hoje = int(resumo_logs["liberados"] or 0)
@@ -156,18 +159,21 @@ def obter_dashboard() -> dict:
         recentes = conn.execute(
             """
             SELECT l.pessoa_id, l.nome, l.matricula, l.data_hora, l.catraca_nome,
-                   p.plano, p.foto_path,
-                   MAX(l.id) AS ultimo_id
+                   p.plano, p.foto_path, l.id AS ultimo_id
             FROM logs_acesso l
             LEFT JOIN pessoas p ON p.id=l.pessoa_id
             WHERE l.status='LIBERADO'
               AND l.pessoa_id IS NOT NULL
-              AND datetime(l.data_hora) >= datetime(?)
-            GROUP BY l.pessoa_id
-            ORDER BY datetime(l.data_hora) DESC
+              AND l.data_hora >= ?
+              AND l.id = (
+                  SELECT MAX(l2.id) FROM logs_acesso l2
+                  WHERE l2.pessoa_id=l.pessoa_id AND l2.status='LIBERADO'
+                    AND l2.data_hora >= ?
+              )
+            ORDER BY l.data_hora DESC
             LIMIT 12
             """,
-            (hora_limite,),
+            (hora_limite, hora_limite),
         ).fetchall()
 
         presenca = []
@@ -189,11 +195,12 @@ def obter_dashboard() -> dict:
         horas = {h: 0 for h in range(24)}
         for r in conn.execute(
             """
-            SELECT CAST(strftime('%H', data_hora) AS INTEGER) hora, COUNT(*) qtd
+            SELECT CAST(SUBSTR(data_hora,12,2) AS INTEGER) hora, COUNT(*) qtd
             FROM logs_acesso
-            WHERE status='LIBERADO' AND date(data_hora)=date('now','localtime')
+            WHERE status='LIBERADO' AND data_hora>=? AND data_hora<?
             GROUP BY hora
-            """
+            """,
+            (inicio_dia, fim_dia),
         ).fetchall():
             horas[int(r["hora"])] = int(r["qtd"])
 
@@ -204,12 +211,13 @@ def obter_dashboard() -> dict:
             for h in range(24)
         ]
 
+        limite_ultima_hora = (agora - timedelta(minutes=60)).strftime("%Y-%m-%d %H:%M:%S")
         ultima_hora = int(conn.execute(
             """
             SELECT COUNT(*) FROM logs_acesso
-            WHERE status='LIBERADO'
-              AND datetime(data_hora) >= datetime('now','localtime','-60 minutes')
-            """
+            WHERE status='LIBERADO' AND data_hora >= ?
+            """,
+            (limite_ultima_hora,),
         ).fetchone()[0] or 0)
 
         catracas = [dict(r) for r in conn.execute(
@@ -220,16 +228,22 @@ def obter_dashboard() -> dict:
             """
         ).fetchall()]
 
+        inicio_mes = hoje.replace(day=1).isoformat()
+        if hoje.month == 12:
+            fim_mes = date(hoje.year + 1, 1, 1).isoformat()
+        else:
+            fim_mes = date(hoje.year, hoje.month + 1, 1).isoformat()
         financeiro_row = conn.execute(
             """
             SELECT
-              COALESCE(SUM(CASE WHEN status='PAGO' AND date(data_pagamento)=date('now','localtime') THEN valor_centavos ELSE 0 END),0) receita_hoje,
-              COALESCE(SUM(CASE WHEN status='PAGO' AND strftime('%Y-%m',data_pagamento)=strftime('%Y-%m','now','localtime') THEN valor_centavos ELSE 0 END),0) receita_mes,
+              COALESCE(SUM(CASE WHEN status='PAGO' AND data_pagamento>=? AND data_pagamento<? THEN valor_centavos ELSE 0 END),0) receita_hoje,
+              COALESCE(SUM(CASE WHEN status='PAGO' AND data_pagamento>=? AND data_pagamento<? THEN valor_centavos ELSE 0 END),0) receita_mes,
               COALESCE(SUM(CASE WHEN status IN ('PENDENTE','VENCIDO') THEN valor_centavos ELSE 0 END),0) a_receber,
               SUM(CASE WHEN status='VENCIDO' THEN 1 ELSE 0 END) cobrancas_vencidas,
-              SUM(CASE WHEN status='PAGO' AND strftime('%Y-%m',data_pagamento)=strftime('%Y-%m','now','localtime') THEN 1 ELSE 0 END) pagamentos_mes
+              SUM(CASE WHEN status='PAGO' AND data_pagamento>=? AND data_pagamento<? THEN 1 ELSE 0 END) pagamentos_mes
             FROM cobrancas
-            """
+            """,
+            (inicio_dia, fim_dia, inicio_mes, fim_mes, inicio_mes, fim_mes),
         ).fetchone()
         pagamentos_recentes = [dict(r) for r in conn.execute(
             """

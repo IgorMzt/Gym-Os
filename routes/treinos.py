@@ -97,7 +97,7 @@ def api_criar_ficha_treino():
         return jsonify({"sucesso": True, "id": ficha_id})
     except ValueError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400
-    except sqlite3.IntegrityError:
+    except database.IntegrityError:
         return jsonify({"sucesso": False, "erro": "A ficha contém aluno, professor ou exercício inválido."}), 400
     except Exception:
         return jsonify({"sucesso": False, "erro": "Não foi possível criar a ficha."}), 500
@@ -143,7 +143,7 @@ def api_atualizar_ficha_treino(ficha_id):
         return jsonify({"sucesso": True})
     except ValueError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400
-    except sqlite3.IntegrityError:
+    except database.IntegrityError:
         return jsonify({"sucesso": False, "erro": "A ficha contém aluno, professor ou exercício inválido."}), 400
     except Exception:
         return jsonify({"sucesso": False, "erro": "Não foi possível atualizar a ficha."}), 500

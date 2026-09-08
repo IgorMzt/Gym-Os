@@ -32,15 +32,7 @@ def local_only(func):
 
 
 def _database_probe() -> dict:
-    try:
-        conn = database.conectar()
-        try:
-            conn.execute("SELECT 1").fetchone()
-        finally:
-            conn.close()
-        return {"ok": True, "backend": "sqlite", "schema_version": database.SCHEMA_VERSION}
-    except Exception as exc:
-        return {"ok": False, "backend": "sqlite", "detalhe": str(exc)}
+    return database.healthcheck_banco()
 
 
 def readiness_report() -> dict:

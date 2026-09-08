@@ -52,13 +52,17 @@ class Settings:
     database_backend: str
     database_url: str
     sqlite_path: str
+    database_pool_min: int
+    database_pool_max: int
+    database_pool_timeout: int
+    app_timezone: str
     storage_backend: str
     storage_local_dir: str
     log_level: str
     log_dir: str
     enable_local_hardware: bool
     agent_api_token: str
-    app_version: str = "6.9"
+    app_version: str = "6.10"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -82,6 +86,10 @@ class Settings:
             database_backend=(os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower(),
             database_url=(os.getenv("DATABASE_URL") or "").strip(),
             sqlite_path=(os.getenv("SQLITE_PATH") or "").strip(),
+            database_pool_min=_int_env("DATABASE_POOL_MIN", 1, 1, 50),
+            database_pool_max=_int_env("DATABASE_POOL_MAX", 8, 1, 100),
+            database_pool_timeout=_int_env("DATABASE_POOL_TIMEOUT", 10, 1, 120),
+            app_timezone=(os.getenv("APP_TIMEZONE") or "America/Sao_Paulo").strip(),
             storage_backend=(os.getenv("STORAGE_BACKEND") or "local").strip().lower(),
             storage_local_dir=(os.getenv("STORAGE_LOCAL_DIR") or "").strip(),
             log_level=(os.getenv("LOG_LEVEL") or "INFO").strip().upper(),
@@ -107,6 +115,12 @@ class Settings:
             raise ValueError("DATABASE_BACKEND deve ser sqlite ou postgresql.")
         if self.storage_backend not in {"local", "object"}:
             raise ValueError("STORAGE_BACKEND deve ser local ou object.")
+        if self.database_backend == "postgresql" and not self.database_url:
+            raise ValueError("DATABASE_URL e obrigatoria quando DATABASE_BACKEND=postgresql.")
+        if self.database_pool_min > self.database_pool_max:
+            raise ValueError("DATABASE_POOL_MIN nao pode ser maior que DATABASE_POOL_MAX.")
+        if not self.app_timezone or len(self.app_timezone) > 80:
+            raise ValueError("APP_TIMEZONE invalida.")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("LOG_LEVEL invalido.")
 

@@ -1,8 +1,8 @@
 """Abstracao minima de storage para preparar a migracao para object storage.
 
-Na V6.9 o backend efetivo continua LOCAL. O contrato deste modulo permite
-substituir a persistencia de uploads na V6.10/V6.11 sem espalhar caminhos de
-disco pelas rotas.
+Na V6.10 o backend efetivo de uploads continua LOCAL. O contrato deste modulo
+permite substituir a persistencia por object storage na V6.12 sem espalhar
+caminhos de disco pelas rotas.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def _local_root() -> Path:
 
 def salvar_upload(conteudo: bytes, extensao: str = ".bin") -> str:
     if backend() != "local":
-        raise RuntimeError("Object storage ainda nao foi ativado; use STORAGE_BACKEND=local na V6.9.")
+        raise RuntimeError("Object storage ainda nao foi ativado; use STORAGE_BACKEND=local ate a V6.12.")
     if not extensao.startswith("."):
         extensao = "." + extensao
     nome = f"{uuid.uuid4().hex}{extensao.lower()}"

@@ -46,3 +46,12 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - `DATABASE_URL` e credenciais de object storage nunca devem entrar no Git; o `.env.example` contém somente placeholders.
 - `/health/ready` não expõe segredos e deve permanecer útil para orquestração/monitoramento.
 - O papel `cloud` não deve executar câmera, reconhecimento facial nem acionar catraca. A separação física completa desses componentes será concluída na V6.11.
+## PostgreSQL e migração de dados — V6.10
+
+- `DATABASE_URL` é segredo e nunca deve ser commitada.
+- Prefira TLS/SSL exigido pelo provedor no ambiente cloud.
+- Migre para um banco vazio e mantenha um backup verificável do SQLite antes da troca.
+- O comando `migrate-sqlite` preserva IDs; não execute `--allow-existing` sem revisar conflitos de dados.
+- Em PostgreSQL, o botão de backup `.db` não é utilizado. Configure snapshots/backup gerenciado e política de retenção no provedor.
+- Bancos com biometria, CPF e dados financeiros exigem controle de acesso mínimo, logs e segregação entre desenvolvimento e produção.
+

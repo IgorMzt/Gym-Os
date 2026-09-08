@@ -10,22 +10,44 @@ from typing import Iterable
 
 import numpy as np
 
+from core import database_backend
+from core.postgres_schema import POSTGRES_SCHEMA_STATEMENTS
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
-SCHEMA_VERSION = 19
+DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
+DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
+SCHEMA_VERSION = 20
+IntegrityError = database_backend.integrity_error_types()
 
 
 def configure_runtime(settings) -> None:
-    """Aplica somente configuracoes suportadas pela camada SQLite atual.
+    """Configura SQLite ou PostgreSQL sem alterar a API publica de persistencia."""
+    global DB_PATH, DATABASE_BACKEND, DATABASE_URL, IntegrityError
+    DATABASE_BACKEND = settings.database_backend
+    DATABASE_URL = settings.database_url
+    if DATABASE_BACKEND == "sqlite":
+        database_backend.close_pool()
+        DB_PATH = settings.sqlite_file(BASE_DIR)
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        database_backend.configure(
+            backend="postgresql",
+            database_url=DATABASE_URL,
+            pool_min=settings.database_pool_min,
+            pool_max=settings.database_pool_max,
+            pool_timeout=settings.database_pool_timeout,
+            timezone=settings.app_timezone,
+        )
+        IntegrityError = database_backend.integrity_error_types()
 
-    DATABASE_BACKEND=postgresql e DATABASE_URL sao reconhecidos pela camada de
-    configuracao na V6.9, mas a troca efetiva de driver fica para a V6.10.
-    """
-    global DB_PATH
-    if settings.database_backend != "sqlite":
-        raise RuntimeError("PostgreSQL sera ativado na V6.10; use DATABASE_BACKEND=sqlite na V6.9.")
-    DB_PATH = settings.sqlite_file(BASE_DIR)
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+def backend_banco() -> str:
+    return DATABASE_BACKEND
+
+
+def is_postgresql() -> bool:
+    return DATABASE_BACKEND == "postgresql"
 
 
 DEFAULT_PLANS = [
@@ -67,6 +89,8 @@ DEFAULT_SETTINGS = {
 
 
 def conectar():
+    if is_postgresql():
+        return database_backend.connect()
     conn = sqlite3.connect(DB_PATH, timeout=5.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -244,7 +268,79 @@ def _migrar_historicos_para_pessoa_opcional(conn):
         ],
     )
 
+def _sincronizar_sequences_postgresql(conn=None):
+    """Alinha sequences depois de inserts com IDs explicitos (seed/migracao)."""
+    if not is_postgresql():
+        return
+    proprio = conn is None
+    conn = conn or conectar()
+    tabelas = sorted(database_backend.IDENTITY_TABLES)
+    try:
+        for tabela in tabelas:
+            # nomes vem de constante interna, nao de entrada do usuario.
+            existe = conn.execute(
+                "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=? AND column_name='id'",
+                (tabela,),
+            ).fetchone()
+            if not existe:
+                continue
+            row = conn.execute(f"SELECT COUNT(*) qtd, COALESCE(MAX(id),1) max_id FROM {tabela}").fetchone()
+            qtd = int(row["qtd"] or 0)
+            max_id = int(row["max_id"] or 1)
+            conn.execute(
+                f"SELECT setval(pg_get_serial_sequence('{tabela}','id'), ?, ?)",
+                (max_id, bool(qtd)),
+            )
+        if proprio:
+            conn.commit()
+    finally:
+        if proprio:
+            conn.close()
+
+
+def _criar_tabelas_postgresql():
+    conn = conectar()
+    try:
+        for statement in POSTGRES_SCHEMA_STATEMENTS:
+            conn.execute(statement)
+
+        conn.execute(
+            "INSERT INTO schema_meta (chave, valor) VALUES ('schema_version', ?) "
+            "ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor",
+            (str(SCHEMA_VERSION),),
+        )
+        for nome, valor, dias, descricao in DEFAULT_PLANS:
+            conn.execute(
+                "INSERT INTO planos (nome, valor_centavos, duracao_dias, descricao, ativo) VALUES (?, ?, ?, ?, 1) "
+                "ON CONFLICT(nome) DO NOTHING",
+                (nome, valor, dias, descricao),
+            )
+        for chave, valor in DEFAULT_SETTINGS.items():
+            conn.execute(
+                "INSERT INTO configuracoes (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO NOTHING",
+                (chave, valor),
+            )
+        conn.execute(
+            "INSERT INTO catracas (id, nome, local, modo, ativa) VALUES (1, 'Catraca 01 - Entrada', 'Entrada principal', 'SIMULADA', 1) "
+            "ON CONFLICT(id) DO NOTHING"
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-20-postgresql", "V6.10", "Schema PostgreSQL inicializado."),
+        )
+        _sincronizar_sequences_postgresql(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def criar_tabelas():
+    if is_postgresql():
+        return _criar_tabelas_postgresql()
     conn = conectar()
     try:
         _migrar_cobrancas_para_pessoa_opcional(conn)
@@ -696,6 +792,17 @@ def criar_tabelas():
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS database_migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                migration_key TEXT NOT NULL UNIQUE,
+                origem TEXT,
+                detalhes TEXT,
+                executado_em TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS schema_meta (
                 chave TEXT PRIMARY KEY,
                 valor TEXT NOT NULL
@@ -705,6 +812,10 @@ def criar_tabelas():
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta (chave, valor) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-20-dual-database", "V6.10", "Schema preparado para SQLite/PostgreSQL."),
         )
         conn.execute(
             """
@@ -1079,25 +1190,16 @@ def remover_pessoa(pessoa_id: int) -> bool:
         conn.execute("BEGIN IMMEDIATE")
 
         # Históricos são preservados e apenas perdem o vínculo com o cadastro removido.
+        # As tabelas fazem parte do schema corrente nos dois backends.
         for tabela in ("logs_acesso", "cobrancas", "cobranca_eventos"):
-            existe = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)
-            ).fetchone()
-            if existe:
-                colunas = {row[1] for row in conn.execute(f"PRAGMA table_info({tabela})")}
-                if "pessoa_id" in colunas:
-                    conn.execute(
-                        f"UPDATE {tabela} SET pessoa_id=NULL WHERE pessoa_id=?",
-                        (pessoa_id,),
-                    )
+            conn.execute(
+                f"UPDATE {tabela} SET pessoa_id=NULL WHERE pessoa_id=?",
+                (pessoa_id,),
+            )
 
         # Dados dependentes sem utilidade sem o aluno podem ser apagados.
         for tabela in ("face_encodings", "gateway_clientes"):
-            existe = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)
-            ).fetchone()
-            if existe:
-                conn.execute(f"DELETE FROM {tabela} WHERE pessoa_id=?", (pessoa_id,))
+            conn.execute(f"DELETE FROM {tabela} WHERE pessoa_id=?", (pessoa_id,))
 
         cur = conn.execute("DELETE FROM pessoas WHERE id=?", (pessoa_id,))
         conn.commit()
@@ -1236,21 +1338,22 @@ def renovar_plano(pessoa_id: int, plano_id: int | None = None):
 def registrar_log(pessoa_id, nome, status, motivo, cpf=None, matricula=None, janela_segundos=5, catraca_id=None, catraca_nome=None) -> bool:
     conn = conectar()
     try:
+        limite = (datetime.now() - timedelta(seconds=max(0, int(janela_segundos)))).strftime("%Y-%m-%d %H:%M:%S")
         if pessoa_id is not None:
             repetido = conn.execute(
                 """
                 SELECT 1 FROM logs_acesso WHERE pessoa_id=? AND status=?
                   AND COALESCE(catraca_id,0)=COALESCE(?,0)
-                  AND data_hora >= datetime('now', ?) ORDER BY id DESC LIMIT 1
-                """, (pessoa_id, status, catraca_id, f"-{janela_segundos} seconds")
+                  AND data_hora >= ? ORDER BY id DESC LIMIT 1
+                """, (pessoa_id, status, catraca_id, limite)
             ).fetchone()
         else:
             repetido = conn.execute(
                 """
                 SELECT 1 FROM logs_acesso WHERE pessoa_id IS NULL AND nome=? AND status=?
                   AND COALESCE(catraca_id,0)=COALESCE(?,0)
-                  AND data_hora >= datetime('now', ?) ORDER BY id DESC LIMIT 1
-                """, (nome, status, catraca_id, f"-{janela_segundos} seconds")
+                  AND data_hora >= ? ORDER BY id DESC LIMIT 1
+                """, (nome, status, catraca_id, limite)
             ).fetchone()
         if repetido:
             return False
@@ -1270,14 +1373,18 @@ def listar_logs(limite=50, filtros=None):
     try:
         where, params = [], []
         if filtros.get("data_inicio"):
-            where.append("date(data_hora) >= date(?)"); params.append(filtros["data_inicio"])
+            where.append("data_hora >= ?"); params.append(str(filtros["data_inicio"])[:10])
         if filtros.get("data_fim"):
-            where.append("date(data_hora) <= date(?)"); params.append(filtros["data_fim"])
+            try:
+                fim_exclusivo = (date.fromisoformat(str(filtros["data_fim"])[:10]) + timedelta(days=1)).isoformat()
+            except ValueError:
+                fim_exclusivo = str(filtros["data_fim"])[:10] + " 23:59:59.999999"
+            where.append("data_hora < ?"); params.append(fim_exclusivo)
         if filtros.get("status"):
             where.append("status=?"); params.append(filtros["status"])
         if filtros.get("termo"):
             termo = f"%{filtros['termo']}%"
-            where.append("(nome LIKE ? OR cpf LIKE ? OR matricula LIKE ?)"); params.extend([termo, termo, termo])
+            where.append("(LOWER(nome) LIKE LOWER(?) OR cpf LIKE ? OR LOWER(matricula) LIKE LOWER(?))"); params.extend([termo, termo, termo])
         if filtros.get("catraca_id"):
             where.append("catraca_id=?"); params.append(int(filtros["catraca_id"]))
         sql = "SELECT id,pessoa_id,nome,cpf,matricula,status,motivo,data_hora,catraca_id,catraca_nome FROM logs_acesso"
@@ -1329,21 +1436,29 @@ def dashboard():
     bloqueados = total - ativos
     conn = conectar()
     try:
+        amanha = (date.today() + timedelta(days=1)).isoformat()
         row = conn.execute(
             "SELECT COUNT(*) total, SUM(CASE WHEN status='LIBERADO' THEN 1 ELSE 0 END) liberados, "
             "SUM(CASE WHEN status='BLOQUEADO' THEN 1 ELSE 0 END) bloqueados, SUM(CASE WHEN status='NEGADO' THEN 1 ELSE 0 END) negados "
-            "FROM logs_acesso WHERE date(data_hora)=date(?)", (hoje,)
+            "FROM logs_acesso WHERE data_hora>=? AND data_hora<?", (hoje, amanha)
         ).fetchone()
         acessos_hoje = int(row["total"] or 0)
         liberados_hoje = int(row["liberados"] or 0)
         bloqueados_hoje = int(row["bloqueados"] or 0)
         negados_hoje = int(row["negados"] or 0)
         horarios = [0] * 24
-        for r in conn.execute("SELECT CAST(strftime('%H', data_hora) AS INTEGER) h, COUNT(*) n FROM logs_acesso WHERE datetime(data_hora) >= datetime('now','-24 hours') GROUP BY h").fetchall():
+        limite_24h = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        for r in conn.execute(
+            "SELECT CAST(SUBSTR(data_hora,12,2) AS INTEGER) h, COUNT(*) n "
+            "FROM logs_acesso WHERE data_hora >= ? GROUP BY h", (limite_24h,)
+        ).fetchall():
             horarios[int(r["h"])] = int(r["n"])
+        ate = (date.today() + timedelta(days=7)).isoformat()
         vencendo = conn.execute(
-            "SELECT id,nome,matricula,plano,data_vencimento FROM pessoas WHERE data_vencimento IS NOT NULL AND date(data_vencimento) BETWEEN date(?) AND date(?, '+7 day') ORDER BY date(data_vencimento),nome",
-            (hoje, hoje),
+            "SELECT id,nome,matricula,plano,data_vencimento FROM pessoas "
+            "WHERE data_vencimento IS NOT NULL AND data_vencimento BETWEEN ? AND ? "
+            "ORDER BY data_vencimento,nome",
+            (hoje, ate),
         ).fetchall()
         ultimos = conn.execute("SELECT nome,status,motivo,data_hora,catraca_nome FROM logs_acesso ORDER BY id DESC LIMIT 10").fetchall()
         alunos_acessos = conn.execute(
@@ -1443,8 +1558,8 @@ def buscar_alunos_global(termo: str, limite=8):
         return [dict(r) for r in conn.execute(
             """SELECT id,nome,cpf,matricula,plano,data_vencimento,foto_path
                FROM pessoas
-               WHERE nome LIKE ? COLLATE NOCASE OR cpf LIKE ? OR matricula LIKE ? COLLATE NOCASE
-               ORDER BY CASE WHEN matricula=? COLLATE NOCASE THEN 0 ELSE 1 END,nome COLLATE NOCASE
+               WHERE LOWER(nome) LIKE LOWER(?) OR cpf LIKE ? OR LOWER(matricula) LIKE LOWER(?)
+               ORDER BY CASE WHEN LOWER(matricula)=LOWER(?) THEN 0 ELSE 1 END,LOWER(nome)
                LIMIT ?""", (like,like,like,q,int(limite))
         ).fetchall()]
     finally:
@@ -1510,7 +1625,6 @@ def salvar_configuracoes(dados: dict):
     finally: conn.close()
 
 
-criar_tabelas()
 
 
 def registrar_log_admin(acao: str, alvo=None, detalhes=None, ip=None):
@@ -1539,23 +1653,62 @@ def listar_logs_admin(limite=100):
 def verificar_integridade():
     conn = conectar()
     try:
-        quick = conn.execute("PRAGMA quick_check").fetchone()[0]
-        fk = [dict(r) for r in conn.execute("PRAGMA foreign_key_check").fetchall()]
         versao = conn.execute(
             "SELECT valor FROM schema_meta WHERE chave='schema_version'"
         ).fetchone()
+        if is_postgresql():
+            invalidas = int(conn.execute(
+                """SELECT COUNT(*) FROM pg_constraint c
+                   JOIN pg_namespace n ON n.oid=c.connamespace
+                   WHERE n.nspname='public' AND NOT c.convalidated"""
+            ).fetchone()[0] or 0)
+            tamanho = int(conn.execute("SELECT pg_database_size(current_database())").fetchone()[0] or 0)
+            return {
+                "ok": invalidas == 0,
+                "quick_check": "postgresql-ok" if invalidas == 0 else "constraints-pendentes",
+                "foreign_keys": invalidas,
+                "schema_version": versao[0] if versao else "1",
+                "tamanho_bytes": tamanho,
+                "backend": "postgresql",
+            }
+
+        quick = conn.execute("PRAGMA quick_check").fetchone()[0]
+        fk = [dict(r) for r in conn.execute("PRAGMA foreign_key_check").fetchall()]
         return {
             "ok": quick == "ok" and not fk,
             "quick_check": quick,
             "foreign_keys": len(fk),
             "schema_version": versao[0] if versao else "1",
             "tamanho_bytes": DB_PATH.stat().st_size if DB_PATH.exists() else 0,
+            "backend": "sqlite",
         }
     finally:
         conn.close()
 
 
+def healthcheck_banco():
+    conn = None
+    try:
+        conn = conectar()
+        conn.execute("SELECT 1").fetchone()
+        versao = conn.execute("SELECT valor FROM schema_meta WHERE chave='schema_version'").fetchone()
+        return {
+            "ok": True,
+            "backend": backend_banco(),
+            "schema_version": int(versao[0]) if versao and str(versao[0]).isdigit() else SCHEMA_VERSION,
+        }
+    except Exception as exc:
+        return {"ok": False, "backend": backend_banco(), "detalhe": str(exc)}
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def criar_backup(destino):
+    if is_postgresql():
+        raise RuntimeError(
+            "Backup .db e exclusivo do SQLite. Em PostgreSQL use o backup/snapshot do provedor ou pg_dump."
+        )
     destino = Path(destino)
     destino.parent.mkdir(parents=True, exist_ok=True)
     origem = conectar()
@@ -1570,6 +1723,10 @@ def criar_backup(destino):
 
 
 def restaurar_backup(origem):
+    if is_postgresql():
+        raise RuntimeError(
+            "Restauracao de arquivo .db e exclusiva do SQLite. Para PostgreSQL use a rotina do provedor/pg_restore."
+        )
     origem = Path(origem)
     teste = sqlite3.connect(origem)
     try:
@@ -1918,7 +2075,7 @@ def garantir_usuario_bootstrap(login: str, nome: str, senha_hash: str):
             )
             uid = existente["id"]
         else:
-            por_login = conn.execute("SELECT * FROM usuarios WHERE login=? COLLATE NOCASE", (login,)).fetchone()
+            por_login = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?)", (login,)).fetchone()
             if por_login:
                 # Nao sobrescreve uma conta local existente; apenas garante que haja um admin ativo.
                 uid = por_login["id"]
@@ -1936,7 +2093,7 @@ def garantir_usuario_bootstrap(login: str, nome: str, senha_hash: str):
 def obter_usuario_por_login(login: str):
     conn = conectar()
     try:
-        row = conn.execute("SELECT * FROM usuarios WHERE login=? COLLATE NOCASE LIMIT 1", (login,)).fetchone()
+        row = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?) LIMIT 1", (login,)).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -2563,7 +2720,7 @@ def assumir_aluno_professor(professor_id:int,pessoa_id:int):
                 data_atualizacao=CURRENT_TIMESTAMP
         """,(professor_id,pessoa_id))
         conn.commit(); return True,None
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         conn.rollback(); return False,"Este aluno acabou de ser assumido por outro professor."
     finally: conn.close()
 
@@ -2786,15 +2943,21 @@ def concluir_sessao_treino(sessao_id: int, observacoes=None):
         if pendentes:
             conn.rollback()
             return False, f"Ainda há {pendentes} exercício(s) pendente(s)."
+        agora = datetime.now()
+        try:
+            inicio = datetime.fromisoformat(str(sessao["iniciado_em"])[:19])
+            duracao = max(0, int((agora - inicio).total_seconds()))
+        except (TypeError, ValueError):
+            duracao = None
         conn.execute(
             """
             UPDATE treino_sessoes SET
                 status='CONCLUIDO',
-                finalizado_em=CURRENT_TIMESTAMP,
-                duracao_segundos=MAX(0,CAST((julianday(CURRENT_TIMESTAMP)-julianday(iniciado_em))*86400 AS INTEGER)),
+                finalizado_em=?,
+                duracao_segundos=?,
                 observacoes=?
             WHERE id=?
-            """, (observacoes, sessao_id)
+            """, (agora.strftime("%Y-%m-%d %H:%M:%S"), duracao, observacoes, sessao_id)
         )
         conn.commit()
         return True, None
@@ -2808,15 +2971,24 @@ def concluir_sessao_treino(sessao_id: int, observacoes=None):
 def cancelar_sessao_treino(sessao_id: int, observacoes=None):
     conn = conectar()
     try:
+        sessao = conn.execute("SELECT iniciado_em FROM treino_sessoes WHERE id=? AND status='EM_ANDAMENTO'", (sessao_id,)).fetchone()
+        agora = datetime.now()
+        duracao = None
+        if sessao:
+            try:
+                inicio = datetime.fromisoformat(str(sessao["iniciado_em"])[:19])
+                duracao = max(0, int((agora - inicio).total_seconds()))
+            except (TypeError, ValueError):
+                pass
         cur = conn.execute(
             """
             UPDATE treino_sessoes SET
                 status='CANCELADO',
-                finalizado_em=CURRENT_TIMESTAMP,
-                duracao_segundos=MAX(0,CAST((julianday(CURRENT_TIMESTAMP)-julianday(iniciado_em))*86400 AS INTEGER)),
+                finalizado_em=?,
+                duracao_segundos=?,
                 observacoes=?
             WHERE id=? AND status='EM_ANDAMENTO'
-            """, (observacoes, sessao_id)
+            """, (agora.strftime("%Y-%m-%d %H:%M:%S"), duracao, observacoes, sessao_id)
         )
         conn.commit()
         return (True, None) if cur.rowcount else (False, "Sessão não encontrada ou já finalizada.")
@@ -2863,15 +3035,16 @@ def estatisticas_execucoes(pessoa_ids=None):
             marks = ",".join("?" for _ in pessoa_ids)
             where = f" WHERE pessoa_id IN ({marks})"
             params += pessoa_ids
+        limite_30 = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
         row = conn.execute(
             f"""
             SELECT
                 SUM(CASE WHEN status='EM_ANDAMENTO' THEN 1 ELSE 0 END) em_andamento,
                 SUM(CASE WHEN status='CONCLUIDO' THEN 1 ELSE 0 END) concluidos,
-                SUM(CASE WHEN status='CONCLUIDO' AND datetime(iniciado_em)>=datetime('now','-30 days') THEN 1 ELSE 0 END) ultimos_30_dias,
+                SUM(CASE WHEN status='CONCLUIDO' AND iniciado_em>=? THEN 1 ELSE 0 END) ultimos_30_dias,
                 AVG(CASE WHEN status='CONCLUIDO' THEN duracao_segundos END) duracao_media
             FROM treino_sessoes{where}
-            """, params
+            """, [limite_30] + params
         ).fetchone()
         return {
             "em_andamento": int(row["em_andamento"] or 0),
@@ -3031,13 +3204,14 @@ def estatisticas_avaliacoes(pessoa_ids=None):
             marks = ",".join("?" for _ in pessoa_ids)
             where = f" WHERE pessoa_id IN ({marks})"
             params += pessoa_ids
+        limite_30 = (date.today() - timedelta(days=30)).isoformat()
         row = conn.execute(
             f"""
             SELECT COUNT(*) avaliacoes,
                    COUNT(DISTINCT pessoa_id) alunos_avaliados,
-                   SUM(CASE WHEN date(data_avaliacao)>=date('now','-30 days') THEN 1 ELSE 0 END) ultimos_30_dias
+                   SUM(CASE WHEN data_avaliacao>=? THEN 1 ELSE 0 END) ultimos_30_dias
             FROM avaliacoes_fisicas{where}
-            """, params
+            """, [limite_30] + params
         ).fetchone()
         if pessoa_ids is None:
             total_alunos = conn.execute("SELECT COUNT(*) FROM pessoas").fetchone()[0]
@@ -3173,7 +3347,7 @@ def obter_acesso_aluno_por_login(login: str):
             SELECT aa.*,p.nome,p.matricula,p.foto_path
             FROM aluno_acessos aa
             JOIN pessoas p ON p.id=aa.pessoa_id
-            WHERE aa.login=? COLLATE NOCASE
+            WHERE LOWER(aa.login)=LOWER(?)
             LIMIT 1
             """, ((login or "").strip(),)
         ).fetchone()
@@ -3208,12 +3382,12 @@ def salvar_acesso_aluno(pessoa_id: int, login: str, senha_hash=None, ativo=True)
         if not pessoa:
             raise ValueError("Aluno não encontrado.")
         conflito_equipe = conn.execute(
-            "SELECT id FROM usuarios WHERE login=? COLLATE NOCASE LIMIT 1", (login,)
+            "SELECT id FROM usuarios WHERE LOWER(login)=LOWER(?) LIMIT 1", (login,)
         ).fetchone()
         if conflito_equipe:
             raise ValueError("Este login já pertence a uma conta da equipe.")
         conflito_aluno = conn.execute(
-            "SELECT pessoa_id FROM aluno_acessos WHERE login=? COLLATE NOCASE AND pessoa_id<>? LIMIT 1",
+            "SELECT pessoa_id FROM aluno_acessos WHERE LOWER(login)=LOWER(?) AND pessoa_id<>? LIMIT 1",
             (login, pessoa_id)
         ).fetchone()
         if conflito_aluno:
@@ -3393,9 +3567,10 @@ def metricas_professor(professor_id:int):
         total=int(conn.execute("SELECT COUNT(*) FROM professor_alunos WHERE professor_id=? AND ativo=1",(professor_id,)).fetchone()[0])
         sem_ficha=int(conn.execute("""SELECT COUNT(*) FROM professor_alunos pa WHERE pa.professor_id=? AND pa.ativo=1
             AND NOT EXISTS(SELECT 1 FROM fichas_treino f WHERE f.pessoa_id=pa.pessoa_id AND f.ativo=1)""",(professor_id,)).fetchone()[0])
+        limite_60=(date.today()-timedelta(days=60)).isoformat()
         sem_avaliacao=int(conn.execute("""SELECT COUNT(*) FROM professor_alunos pa WHERE pa.professor_id=? AND pa.ativo=1
             AND NOT EXISTS(SELECT 1 FROM avaliacoes_fisicas a WHERE a.pessoa_id=pa.pessoa_id
-            AND date(a.data_avaliacao)>=date('now','localtime','-60 day'))""",(professor_id,)).fetchone()[0])
+            AND a.data_avaliacao>=?)""",(professor_id,limite_60)).fetchone()[0])
         treinando=int(conn.execute("""SELECT COUNT(DISTINCT s.pessoa_id) FROM treino_sessoes s
             JOIN professor_alunos pa ON pa.pessoa_id=s.pessoa_id AND pa.professor_id=? AND pa.ativo=1
             WHERE s.status='EM_ANDAMENTO'""",(professor_id,)).fetchone()[0])

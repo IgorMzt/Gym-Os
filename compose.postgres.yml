@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gymos
+      POSTGRES_USER: gymos
+      POSTGRES_PASSWORD: gymos_dev
+      TZ: America/Sao_Paulo
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gymos -d gymos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - gymos_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  gymos_postgres_data:

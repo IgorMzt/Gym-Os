@@ -1,7 +1,7 @@
 """Aplicacao Flask do Gym OS.
 
-V6.9: app factory, configuracao por ambiente, logging, health/readiness e base
-para separar backend cloud do futuro agente local da academia.
+V6.10: app factory e runtime multi-banco com SQLite/PostgreSQL, mantendo a
+separacao entre backend cloud e futuro agente local da academia.
 """
 
 from __future__ import annotations

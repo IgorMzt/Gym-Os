@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A V6.9 adiciona preparação de produção/cloud, app factory, health/readiness, storage abstrato e a base do agente local.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.10 ativa PostgreSQL**, pool de conexões e migração controlada do SQLite, mantendo SQLite disponível para desenvolvimento/local.
 
 ## Visão geral
 
@@ -29,7 +29,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 | Camada | Tecnologia |
 | --- | --- |
 | Backend | Python 3.11 + Flask |
-| Banco | SQLite (PostgreSQL preparado para a V6.10) |
+| Banco | SQLite ou PostgreSQL (V6.10) |
 | Visão computacional | OpenCV + face_recognition + dlib |
 | Frontend | HTML, CSS e JavaScript vanilla |
 | PWA | Web App Manifest + Service Worker |
@@ -42,10 +42,10 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 .
 ├── app.py                     # App factory Flask e bootstrap de runtime
 ├── wsgi.py                    # Entrada WSGI para ambiente Linux/cloud
-├── manage.py                  # check-config e init-db
-├── core/                      # Configuração e logging por ambiente
+├── manage.py                  # config, banco e migração SQLite → PostgreSQL
+├── core/                      # Configuração, logging e adapter PostgreSQL
 ├── agent/                     # Base do futuro agente local (heartbeat)
-├── database.py                # Schema, migrations e persistência SQLite
+├── database.py                # Persistência compatível com SQLite/PostgreSQL
 ├── config_service.py          # Configurações operacionais
 ├── device_manager.py          # Integração/abstração dos dispositivos de acesso
 ├── face_index.py              # Índice em memória dos encodings faciais
@@ -108,7 +108,7 @@ python -c "import dlib, face_recognition, cv2, numpy; print('dlib:', dlib.__vers
 
 O projeto carrega automaticamente o arquivo `.env` da raiz usando `python-dotenv`. No pacote local há um `.env` pronto para edição e o Git o ignora; no repositório deve existir apenas o `.env.example`.
 
-A V6.9 separa configuração de ambiente e papel de execução. Para desenvolvimento local, os valores principais são:
+A V6.10 mantém a separação por ambiente/papel e adiciona seleção real do backend de banco. Para desenvolvimento local, os valores principais são:
 
 ```env
 APP_ENV=development
@@ -122,7 +122,7 @@ STORAGE_BACKEND=local
 ENABLE_LOCAL_HARDWARE=1
 ```
 
-O `.env.example` documenta também proxy seguro, logging, storage, `DATABASE_URL` reservado para a V6.10 e o canal do agente local.
+O `.env.example` documenta também proxy seguro, logging, pool PostgreSQL, `DATABASE_URL`, storage e o canal do agente local.
 
 `SECRET_KEY` e `ASAAS_WEBHOOK_TOKEN` já podem ser gerados aleatoriamente no seu `.env` local. Você deve trocar `ADMIN_PASSWORD` e preencher `ASAAS_API_KEY`. Se preferir recriar o arquivo a partir do modelo:
 
@@ -146,10 +146,57 @@ A aplicação local fica disponível em:
 http://localhost:5000
 ```
 
-A primeira inicialização cria/migra o banco `perfis.db` automaticamente.
+A primeira inicialização cria/migra o banco `perfis.db` automaticamente quando `DATABASE_BACKEND=sqlite`.
 
+### PostgreSQL local para validação
 
-## Preparação de produção — V6.9
+A V6.10 inclui um compose opcional para testar PostgreSQL sem alterar o SQLite atual:
+
+```powershell
+docker compose -f compose.postgres.yml up -d
+python -m pip install -r requirements.txt
+```
+
+No `.env`, configure temporariamente:
+
+```env
+DATABASE_BACKEND=postgresql
+DATABASE_URL=postgresql://gymos:gymos_dev@127.0.0.1:5432/gymos
+DATABASE_POOL_MIN=1
+DATABASE_POOL_MAX=8
+DATABASE_POOL_TIMEOUT=10
+APP_TIMEZONE=America/Sao_Paulo
+```
+
+Para um **smoke test isolado** de um banco PostgreSQL vazio, você pode inicializar o schema:
+
+```powershell
+python manage.py check-config
+python manage.py init-db
+python manage.py db-status
+```
+
+> As credenciais do compose são **somente para desenvolvimento local**. Não reutilize essa senha em staging/produção.
+
+### Migração SQLite → PostgreSQL
+
+Antes da migração, mantenha uma cópia segura de `perfis.db` e use um PostgreSQL **novo/vazio**. Se você pretende migrar o SQLite real, **não execute `python manage.py init-db` nesse destino antes da migração**, pois esse comando pode criar dados de bootstrap e a migração segura recusará um destino com dados de negócio. Com `DATABASE_BACKEND=postgresql` configurado:
+
+```powershell
+python manage.py migrate-sqlite --source perfis.db --dry-run
+python manage.py migrate-sqlite --source perfis.db
+python manage.py db-status
+```
+
+O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 20, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
+
+Para testar um PostgreSQL já configurado também existe:
+
+```powershell
+python scripts/postgres_smoke.py
+```
+
+## Banco e preparação de produção — V6.10
 
 Antes de qualquer deploy, valide o ambiente:
 
@@ -171,7 +218,7 @@ GET /health/ready  # banco, storage e bloqueios arquiteturais
 GET /health        # compatibilidade com o health check anterior
 ```
 
-A configuração `APP_ROLE=cloud` desativa operações de hardware local. Enquanto PostgreSQL e object storage ainda não estiverem ativos, `/health/ready` aponta os bloqueios `database_postgresql_pendente` e `storage_objeto_pendente`. Isso é intencional na V6.9 e será resolvido na V6.10.
+A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` continua intencional até a V6.12, quando uploads/biometria serão movidos para storage apropriado.
 
 O diretório `agent/` já possui um heartbeat autenticado para preparar a separação do computador da academia. Câmera, reconhecimento facial e catraca só serão movidos efetivamente para esse processo na V6.11.
 
@@ -218,7 +265,7 @@ Antes de publicar uma nova versão, também é recomendável validar:
 python -m compileall .
 ```
 
-No banco de desenvolvimento, as verificações importantes são `PRAGMA quick_check` e `PRAGMA foreign_key_check`.
+No SQLite, as verificações usam `PRAGMA quick_check`/`foreign_key_check`; no PostgreSQL, `database.verificar_integridade()` valida conexão, constraints e versão do schema.
 
 ## Dados sensíveis e privacidade
 
@@ -235,7 +282,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V6.9 já introduz configuração de produção, app factory, WSGI, health/readiness, logging, storage abstrato e a base do agente local. Ainda **não é o momento de colocar o backend central em produção**: o banco efetivo continua SQLite e o storage efetivo continua local até a V6.10; câmera, biometria e catraca continuam no processo local atual até a V6.11.
+A V6.10 já permite executar o backend com PostgreSQL e migrar o banco legado. Ainda **não é a release de produção completa**: uploads/biometria continuam locais até a V6.12 e câmera/catraca continuam no processo atual até o agente local da V6.11.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -244,11 +291,16 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 ### V6
 
 - V6.1–V6.8: modularização, API mobile, app Expo, treinos, histórico, evolução, financeiro, push e experiência mobile;
-- **V6.9: preparação de produção/cloud e base do agente local**;
-- V6.10: migração SQLite → PostgreSQL + object storage/infraestrutura cloud;
+- V6.9: preparação de produção/cloud;
+- **V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL**;
 - V6.11: agente local com câmera, reconhecimento facial e catraca;
-- V6.12: hardening, observabilidade, backups e testes finais de produção;
-- release V6.0: merge `develop` → `main` após validação completa.
+- V6.12: storage cloud + tratamento de biometria;
+- V6.13: multiacademia/multiunidade;
+- V6.14: administração SaaS;
+- V6.15: comunicação;
+- V6.16: inteligência/automações;
+- V6.17: hardening final;
+- **V6.0.0:** release oficial após homologação e merge `develop` → `main`.
 
 ## Identidade visual
 

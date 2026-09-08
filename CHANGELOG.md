@@ -1,4 +1,20 @@
-# V6.8 — Experiência Mobile
+# Changelog
+
+## V6.10 — PostgreSQL + persistência cloud
+
+- Schema atualizado para **20** com auditoria `database_migrations`.
+- `DATABASE_BACKEND=postgresql` passa a ser efetivo; SQLite continua suportado.
+- Driver `psycopg` e pool de conexões configurável por ambiente.
+- Adapter preserva a API histórica `conn.execute()` e placeholders `?` no código existente.
+- DDL PostgreSQL equivalente ao domínio atual, incluindo índices e unicidade case-insensitive para logins/exercícios.
+- Queries de dashboard, histórico, avaliações e duração de treino ajustadas para SQL portátil.
+- `manage.py migrate-sqlite` valida e migra `perfis.db` para um PostgreSQL vazio, preservando IDs e sincronizando sequences.
+- `manage.py db-status`, `compose.postgres.yml` e smoke test PostgreSQL adicionados.
+- Health/readiness agora reporta dinamicamente SQLite ou PostgreSQL.
+- Backup/restauração `.db` permanecem exclusivos do SQLite; PostgreSQL deve usar snapshot/pg_dump/pg_restore do ambiente.
+- 7 testes adicionais de schema, configuração, tradutor SQL e inspeção de origem SQLite.
+
+## V6.8 — Experiência Mobile
 
 - Schema 19 com preferências do aluno e feedback pós-treino.
 - Home inteligente com meta semanal, streak, volume, recordes e conquistas.
@@ -10,7 +26,7 @@
 - Perfil com Preferências e informações da versão mobile.
 - Quatro novos testes automatizados da experiência mobile.
 
-# V6.7 — Notificações Push
+## V6.7 — Notificações Push
 
 - Schema 18 com dispositivos push por aluno.
 - Registro e remoção de Expo Push Token via API mobile.
@@ -19,7 +35,7 @@
 - Push automático para nova ficha ativa, pagamento confirmado e mensalidade vencida.
 - Endpoint e botão de teste no Perfil.
 
-# Changelog
+
 
 ## V6.6 — Financeiro completo no mobile
 
@@ -63,7 +79,6 @@
 - CSRF web não é aplicado à API bearer-token; o PWA e sessões web permanecem inalterados.
 - Schema atualizado para 17 com `mobile_refresh_tokens`.
 
-# Changelog
 
 ## V6.1 - em desenvolvimento
 - Modularização completa das rotas Flask em Blueprints por domínio.

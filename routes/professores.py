@@ -267,7 +267,7 @@ def api_salvar_acesso_app_aluno(pessoa_id):
         return jsonify({"sucesso":True,"id":acesso_id,"login":login,"ativo":ativo})
     except ValueError as exc:
         return jsonify({"sucesso":False,"erro":str(exc)}),409
-    except sqlite3.IntegrityError:
+    except database.IntegrityError:
         return jsonify({"sucesso":False,"erro":"Este login já está em uso."}),409
 
 

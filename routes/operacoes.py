@@ -670,6 +670,12 @@ def pagina_diagnostico():
 @operacoes_bp.route("/backup")
 @papel_requerido("ADMIN")
 def baixar_backup():
+    if database.is_postgresql():
+        return jsonify({
+            "sucesso": False,
+            "codigo": "BACKUP_GERENCIADO_POSTGRESQL",
+            "erro": "No PostgreSQL, use snapshots/backups do provedor ou pg_dump. O download .db permanece exclusivo do SQLite.",
+        }), 409
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     destino = Path(tempfile.gettempdir()) / f"panobianco-backup-{stamp}.db"
     database.criar_backup(destino)
@@ -680,6 +686,12 @@ def baixar_backup():
 @operacoes_bp.route("/restaurar-backup", methods=["POST"])
 @papel_requerido("ADMIN")
 def restaurar_backup():
+    if database.is_postgresql():
+        return jsonify({
+            "sucesso": False,
+            "codigo": "RESTORE_GERENCIADO_POSTGRESQL",
+            "erro": "Restauracao .db e exclusiva do SQLite. Em PostgreSQL use a rotina de restore do provedor/pg_restore.",
+        }), 409
     arquivo = request.files.get("backup")
     if not arquivo or not arquivo.filename:
         return jsonify({"sucesso": False, "erro": "Selecione um arquivo .db."}), 400

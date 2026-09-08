@@ -15,3 +15,7 @@ Pillow>=10,<12
 reportlab>=4,<5
 dlib-bin==20.0.1
 face-recognition-models==0.3.0
+
+# V6.10: PostgreSQL + pool de conexoes.
+psycopg[binary]>=3.2,<4
+psycopg-pool>=3.2,<4

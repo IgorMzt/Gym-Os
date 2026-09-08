@@ -7,7 +7,7 @@
 </div>
 
 <div class="stats-grid">
-  <article class="stat-card"><span>Banco de dados</span><strong>{{ 'OK' if integridade.ok else 'ATENÇÃO' }}</strong><small>PRAGMA quick_check: {{ integridade.quick_check }}</small></article>
+  <article class="stat-card"><span>Banco de dados</span><strong>{{ 'OK' if integridade.ok else 'ATENÇÃO' }}</strong><small>{{ integridade.backend|upper }}: {{ integridade.quick_check }}</small></article>
   <article class="stat-card"><span>Schema</span><strong>v{{ integridade.schema_version }}</strong><small>Versão interna do banco</small></article>
   <article class="stat-card"><span>Chaves estrangeiras</span><strong>{{ integridade.foreign_keys }}</strong><small>inconsistências encontradas</small></article>
   <article class="stat-card"><span>Credencial padrão</span><strong>{{ 'ATIVA' if credencial_padrao else 'OK' }}</strong><small>{{ 'Troque antes da produção' if credencial_padrao else 'Senha externa configurada' }}</small></article>
