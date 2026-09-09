@@ -62,7 +62,7 @@ class Settings:
     log_dir: str
     enable_local_hardware: bool
     agent_api_token: str
-    app_version: str = "6.10"
+    app_version: str = "6.11"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -135,6 +135,8 @@ class Settings:
                 raise ValueError("SESSION_COOKIE_SECURE deve ser 1 em producao.")
             if self.cloud and self.enable_local_hardware:
                 raise ValueError("ENABLE_LOCAL_HARDWARE deve ser 0 quando APP_ROLE=cloud.")
+            if self.cloud and len(self.agent_api_token) < 32:
+                raise ValueError("AGENT_API_TOKEN deve ter pelo menos 32 caracteres no backend cloud de producao.")
 
     def readiness_blockers(self) -> list[str]:
         """Pendencias arquiteturais que impedem considerar o papel cloud pronto."""

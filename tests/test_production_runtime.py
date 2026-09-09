@@ -67,6 +67,8 @@ class ProductionRuntimeTests(unittest.TestCase):
             "STORAGE_LOCAL_DIR": str(Path(tmp) / "uploads"),
         }, clear=False):
             original = database.DB_PATH
+            original_backend = database.DATABASE_BACKEND
+            database.DATABASE_BACKEND = "sqlite"
             database.DB_PATH = Path(tmp) / "health.db"
             try:
                 database.criar_tabelas()
@@ -80,21 +82,39 @@ class ProductionRuntimeTests(unittest.TestCase):
                 self.assertTrue(ready.get_json()["ready"])
             finally:
                 database.DB_PATH = original
+                database.DATABASE_BACKEND = original_backend
 
-    def test_agent_heartbeat_exige_token(self):
+    def test_agent_heartbeat_exige_token_individual(self):
         cfg = self._settings(AGENT_API_TOKEN="token-de-teste-123")
-        app = Flask(__name__)
-        app.config["GYM_SETTINGS"] = cfg
-        app.register_blueprint(api_agent_bp)
-        client = app.test_client()
-        self.assertEqual(client.post("/api/v1/agent/heartbeat", json={"agent_id": "pc-1"}).status_code, 401)
-        ok = client.post(
-            "/api/v1/agent/heartbeat",
-            json={"agent_id": "pc-1"},
-            headers={"Authorization": "Bearer token-de-teste-123"},
-        )
-        self.assertEqual(ok.status_code, 200, ok.get_data(as_text=True))
-        self.assertTrue(ok.get_json()["sucesso"])
+        with tempfile.TemporaryDirectory() as tmp:
+            original = database.DB_PATH
+            original_backend = database.DATABASE_BACKEND
+            database.DATABASE_BACKEND = "sqlite"
+            database.DB_PATH = Path(tmp) / "agent-runtime.db"
+            try:
+                database.criar_tabelas()
+                app = Flask(__name__)
+                app.config["GYM_SETTINGS"] = cfg
+                app.register_blueprint(api_agent_bp)
+                client = app.test_client()
+                self.assertEqual(client.post("/api/v1/agent/heartbeat", json={}).status_code, 401)
+                reg = client.post(
+                    "/api/v1/agent/register",
+                    json={"agent_uid": "pc-1"},
+                    headers={"Authorization": "Bearer token-de-teste-123"},
+                )
+                self.assertEqual(reg.status_code, 201, reg.get_data(as_text=True))
+                agent_token = reg.get_json()["agent_token"]
+                ok = client.post(
+                    "/api/v1/agent/heartbeat",
+                    json={"queue_depth": 0},
+                    headers={"Authorization": f"Bearer {agent_token}"},
+                )
+                self.assertEqual(ok.status_code, 200, ok.get_data(as_text=True))
+                self.assertTrue(ok.get_json()["sucesso"])
+            finally:
+                database.DB_PATH = original
+                database.DATABASE_BACKEND = original_backend
 
 
 if __name__ == "__main__":

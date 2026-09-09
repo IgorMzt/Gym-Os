@@ -41,11 +41,11 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 
 - `APP_ENV=production` rejeita `SECRET_KEY` insegura, `ADMIN_PASSWORD` padrão e debug ativo.
 - Em produção, use HTTPS e `SESSION_COOKIE_SECURE=1`; ao operar atrás de proxy confiável, habilite `TRUST_PROXY=1` apenas para a quantidade real de proxies em `PROXY_HOPS`.
-- `AGENT_API_TOKEN` é segredo e deve existir somente no backend central e no computador autorizado da academia. Nunca versione esse token.
-- O endpoint do agente usa token estático apenas como fundação da V6.9. Antes de múltiplas unidades/SaaS, adote rotação/revogação por agente e credenciais individualizadas.
+- `AGENT_API_TOKEN` é um segredo de **bootstrap** e nunca deve ser versionado. Use-o somente para registrar/rotacionar agentes autorizados.
+- Na V6.11 cada agente recebe um token individual; o backend armazena apenas SHA-256. Revogue o agente no painel se o PC for substituído ou comprometido.
 - `DATABASE_URL` e credenciais de object storage nunca devem entrar no Git; o `.env.example` contém somente placeholders.
 - `/health/ready` não expõe segredos e deve permanecer útil para orquestração/monitoramento.
-- O papel `cloud` não deve executar câmera, reconhecimento facial nem acionar catraca. A separação física completa desses componentes será concluída na V6.11.
+- O papel `cloud` não deve executar câmera, reconhecimento facial nem acionar catraca. Esses componentes permanecem no agente/PC local da academia.
 ## PostgreSQL e migração de dados — V6.10
 
 - `DATABASE_URL` é segredo e nunca deve ser commitada.
@@ -55,3 +55,14 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Em PostgreSQL, o botão de backup `.db` não é utilizado. Configure snapshots/backup gerenciado e política de retenção no provedor.
 - Bancos com biometria, CPF e dados financeiros exigem controle de acesso mínimo, logs e segregação entre desenvolvimento e produção.
 
+
+## Agente local — V6.11
+
+- Em produção, `AGENT_SERVER_URL` deve usar **HTTPS**; encodings biométricos não devem trafegar em HTTP público.
+- `agent_state.db` contém cache operacional e biométrico e deve receber as mesmas proteções de disco/usuário aplicadas ao banco principal.
+- O cache offline é limitado por tempo e falha fechado ao expirar para reduzir o risco de autorização com dados antigos.
+- Eventos usam UUID e o servidor aplica idempotência para evitar duplicação após reconexão.
+- Tokens individuais devem ser revogados quando uma máquina for perdida, formatada ou transferida.
+- Comandos cloud → agente são restritos a uma lista permitida; não existe execução arbitrária de shell.
+- Não exponha a API do agente diretamente à internet sem autenticação/reverse proxy apropriados.
+- A V6.12 revisará armazenamento, retenção e distribuição dos dados biométricos em profundidade.

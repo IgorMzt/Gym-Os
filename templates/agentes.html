@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block titulo %}Agentes locais · Gym OS{% endblock %}
+{% block page_title_top %}Agentes locais{% endblock %}
+{% block conteudo %}
+<div class="page-header page-header--row">
+  <div>
+    <div class="eyebrow">INFRAESTRUTURA</div>
+    <h1>Agentes locais</h1>
+    <p>Computadores das academias que mantêm câmera, reconhecimento e catraca próximos do hardware.</p>
+  </div>
+  <button class="btn btn--outline btn--pequeno" type="button" onclick="carregarAgentes()">Atualizar</button>
+</div>
+
+<section class="panel">
+  <div class="panel-heading">
+    <div><h2>Dispositivos registrados</h2><p>Online quando o heartbeat foi recebido recentemente.</p></div>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Agente</th><th>Máquina</th><th>Status</th><th>Fila</th><th>Cache</th><th>Versão</th><th>Ações</th></tr></thead>
+      <tbody id="agents-body">
+      {% for a in agentes %}
+        <tr data-agent-id="{{ a.id }}">
+          <td><strong>{{ a.nome }}</strong><br><small>{{ a.agent_uid }}</small></td>
+          <td>{{ a.hostname or '—' }}<br><small>{{ a.last_ip or '' }}</small></td>
+          <td><span class="badge {{ 'badge--success' if a.status_operacional == 'ONLINE' else 'badge--erro' }}">{{ a.status_operacional }}</span></td>
+          <td>{{ a.queue_depth or 0 }}</td>
+          <td>{{ (a.cache_age_seconds ~ ' s') if a.cache_age_seconds is not none else '—' }}</td>
+          <td>{{ a.app_version or '—' }}</td>
+          <td>
+            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'PING')">Ping</button>
+            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'SYNC_ACCESS')">Sincronizar</button>
+            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'TEST_TURNSTILE')">Testar catraca</button>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7">Nenhum agente registrado. Inicie <code>python -m agent.main --once --sync</code> em um PC da academia.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel" style="margin-top:16px">
+  <div class="panel-heading"><div><h2>Como funciona</h2><p>O segredo de bootstrap registra a máquina uma vez; depois cada agente usa um token individual.</p></div></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+    <article class="panel"><div class="eyebrow">ETAPA 1</div><h3>Cloud</h3><p>API + PostgreSQL + regras centrais.</p></article>
+    <article class="panel"><div class="eyebrow">ETAPA 2</div><h3>Agente</h3><p>Cache + fila offline + comandos.</p></article>
+    <article class="panel"><div class="eyebrow">ETAPA 3</div><h3>Hardware</h3><p>Câmera + reconhecimento + catraca local.</p></article>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+async function comando(id, tipo) {
+  const resp = await fetch(`/api/agentes/${id}/comandos`, {
+    method: 'POST', headers: {'Content-Type':'application/json','X-CSRF-Token':window.CSRF_TOKEN},
+    body: JSON.stringify({tipo})
+  });
+  const data = await resp.json();
+  if (!resp.ok) return alert(data.erro || 'Não foi possível enviar o comando.');
+  alert(`Comando ${tipo} enfileirado. O agente executará no próximo ciclo.`);
+}
+async function carregarAgentes(){ location.reload(); }
+</script>
+{% endblock %}

@@ -379,6 +379,55 @@ POSTGRES_SCHEMA_STATEMENTS = [
     )
     """,
     f"""
+    CREATE TABLE IF NOT EXISTS agentes_locais (
+        id BIGSERIAL PRIMARY KEY,
+        agent_uid TEXT NOT NULL UNIQUE,
+        nome TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        machine_id TEXT,
+        hostname TEXT,
+        plataforma TEXT,
+        app_version TEXT,
+        capabilities_json TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        last_ip TEXT,
+        last_seen_at TEXT,
+        queue_depth INTEGER NOT NULL DEFAULT 0,
+        cache_age_seconds INTEGER,
+        registered_at TEXT {TS_DEFAULT},
+        token_rotated_at TEXT {TS_DEFAULT},
+        updated_at TEXT {TS_DEFAULT}
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS agente_comandos (
+        id BIGSERIAL PRIMARY KEY,
+        agent_id BIGINT NOT NULL REFERENCES agentes_locais(id) ON DELETE CASCADE,
+        command_uuid TEXT NOT NULL UNIQUE,
+        tipo TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{{}}',
+        status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','DELIVERED','ACKED','FAILED')),
+        created_at TEXT {TS_DEFAULT},
+        delivered_at TEXT,
+        acked_at TEXT,
+        result_json TEXT,
+        expires_at TEXT
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS agente_eventos (
+        id BIGSERIAL PRIMARY KEY,
+        agent_id BIGINT NOT NULL REFERENCES agentes_locais(id) ON DELETE CASCADE,
+        event_uuid TEXT NOT NULL UNIQUE,
+        tipo TEXT NOT NULL,
+        payload_json TEXT NOT NULL DEFAULT '{{}}',
+        occurred_at TEXT,
+        received_at TEXT {TS_DEFAULT},
+        processed INTEGER NOT NULL DEFAULT 0,
+        processing_error TEXT
+    )
+    """,
+    f"""
     CREATE TABLE IF NOT EXISTS database_migrations (
         id BIGSERIAL PRIMARY KEY,
         migration_key TEXT NOT NULL UNIQUE,
@@ -426,6 +475,9 @@ POSTGRES_SCHEMA_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_aluno_acessos_ativo ON aluno_acessos(ativo, pessoa_id)",
     "CREATE INDEX IF NOT EXISTS idx_mobile_refresh_ativo ON mobile_refresh_tokens(aluno_acesso_id, revoked_at, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_mobile_push_pessoa_ativo ON mobile_push_devices(pessoa_id, ativo)",
+    "CREATE INDEX IF NOT EXISTS idx_agentes_ativo_seen ON agentes_locais(ativo,last_seen_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agente_comandos_pendentes ON agente_comandos(agent_id,status,id)",
+    "CREATE INDEX IF NOT EXISTS idx_agente_eventos_agent_data ON agente_eventos(agent_id,id DESC)",
     # Equivalentes case-insensitive do COLLATE NOCASE do SQLite.
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_login_lower ON usuarios(LOWER(login))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_aluno_acessos_login_lower ON aluno_acessos(LOWER(login))",

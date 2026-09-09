@@ -28,6 +28,9 @@ TABLE_ORDER = [
     "mobile_refresh_tokens",
     "mobile_push_devices",
     "mobile_aluno_preferencias",
+    "agentes_locais",
+    "agente_comandos",
+    "agente_eventos",
     "cobrancas",
     "cobranca_eventos",
     "gateway_clientes",
@@ -57,6 +60,9 @@ PRIMARY_KEYS = {
     "mobile_refresh_tokens": ["id"],
     "mobile_push_devices": ["id"],
     "mobile_aluno_preferencias": ["pessoa_id"],
+    "agentes_locais": ["id"],
+    "agente_comandos": ["id"],
+    "agente_eventos": ["id"],
     "cobrancas": ["id"],
     "cobranca_eventos": ["id"],
     "gateway_clientes": ["pessoa_id"],
@@ -212,7 +218,7 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
             dst.executemany(_upsert_sql(table, columns), values)
             copied[table] = len(values)
 
-        # A fonte pode estar em schema 19; o destino V6.10 sempre termina em 20.
+        # A fonte pode estar em schema anterior; o destino V6.11 sempre termina no schema atual.
         dst.execute(
             "INSERT INTO schema_meta(chave,valor) VALUES('schema_version',?) "
             "ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor",
@@ -222,7 +228,7 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
         dst.execute(
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO UPDATE SET detalhes=EXCLUDED.detalhes",
-            ("sqlite-to-postgresql-v6.10", str(source_path), detalhe),
+            ("sqlite-to-postgresql-v6.11", str(source_path), detalhe),
         )
         database._sincronizar_sequences_postgresql(dst)
         dst.commit()

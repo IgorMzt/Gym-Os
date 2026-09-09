@@ -11,11 +11,14 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_path = database.DB_PATH
+        self.original_backend = database.DATABASE_BACKEND
+        database.DATABASE_BACKEND = "sqlite"
         database.DB_PATH = Path(self.tmp.name) / "teste.db"
         database.criar_tabelas()
 
     def tearDown(self):
         database.DB_PATH = self.original_path
+        database.DATABASE_BACKEND = self.original_backend
         self.tmp.cleanup()
 
     def _pessoa(self, **overrides):

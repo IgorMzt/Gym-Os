@@ -15,6 +15,8 @@ class MobileExperienceApiTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_path = database.DB_PATH
+        self.original_backend = database.DATABASE_BACKEND
+        database.DATABASE_BACKEND = "sqlite"
         database.DB_PATH = Path(self.tmp.name) / "mobile-experience.db"
         database.criar_tabelas()
         plano = database.listar_planos(True)[0]
@@ -50,10 +52,11 @@ class MobileExperienceApiTests(unittest.TestCase):
 
     def tearDown(self):
         database.DB_PATH = self.original_path
+        database.DATABASE_BACKEND = self.original_backend
         self.tmp.cleanup()
 
-    def test_schema_20(self):
-        self.assertEqual(database.SCHEMA_VERSION, 20)
+    def test_schema_21(self):
+        self.assertEqual(database.SCHEMA_VERSION, 21)
         conn = database.conectar()
         try:
             tabela = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_aluno_preferencias'").fetchone()

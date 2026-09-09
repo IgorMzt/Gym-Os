@@ -60,6 +60,7 @@
       {% if session.get('usuario_papel') == 'ADMIN' %}
       <div class="admin-nav__section">SISTEMA</div>
       <a href="{{ url_for('usuarios.pagina_usuarios') }}" class="{{ 'ativo' if request.path == '/usuarios' else '' }}"><span>♙</span>Usuários</a>
+      <a href="{{ url_for('agentes.pagina_agentes') }}" class="{{ 'ativo' if request.path.startswith('/agentes') else '' }}"><span>⌘</span>Agentes locais</a>
       <a href="{{ url_for('operacoes.pagina_configuracoes') }}" class="{{ 'ativo' if request.path == '/configuracoes' else '' }}"><span>⚙</span>Configurações</a>
       <a href="{{ url_for('operacoes.pagina_diagnostico') }}" class="{{ 'ativo' if request.path == '/diagnostico' else '' }}"><span>◇</span>Diagnóstico</a>
       {% endif %}
@@ -67,8 +68,8 @@
 
     <div class="admin-sidebar__future">
       <span>PRÓXIMO MÓDULO</span>
-      <strong>Produção · V6</strong>
-      <small>API, PostgreSQL, deploy e preparação para multiunidade.</small>
+      <strong>Agente local · V6.11</strong>
+      <small>Cloud conectado à câmera e catraca da academia.</small>
     </div>
 
     <div class="admin-sidebar__footer">

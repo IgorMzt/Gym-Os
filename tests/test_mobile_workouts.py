@@ -15,6 +15,8 @@ class MobileWorkoutApiTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.original_path = database.DB_PATH
+        self.original_backend = database.DATABASE_BACKEND
+        database.DATABASE_BACKEND = "sqlite"
         database.DB_PATH = Path(self.tmp.name) / "mobile-workout.db"
         database.criar_tabelas()
         plano = database.listar_planos(True)[0]
@@ -39,6 +41,7 @@ class MobileWorkoutApiTests(unittest.TestCase):
 
     def tearDown(self):
         database.DB_PATH = self.original_path
+        database.DATABASE_BACKEND = self.original_backend
         self.tmp.cleanup()
 
     def test_fluxo_completo_treino_mobile(self):

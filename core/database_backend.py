@@ -20,8 +20,8 @@ IDENTITY_TABLES = {
     "professores", "professor_alunos", "exercicios", "fichas_treino",
     "treinos", "treino_exercicios", "treino_sessoes", "treino_sessao_itens",
     "avaliacoes_fisicas", "aluno_acessos", "mobile_refresh_tokens",
-    "mobile_push_devices", "logs_admin", "cobrancas", "cobranca_eventos",
-    "catracas", "database_migrations",
+    "mobile_push_devices", "agentes_locais", "agente_comandos", "agente_eventos",
+    "logs_admin", "cobrancas", "cobranca_eventos", "catracas", "database_migrations",
 }
 
 
@@ -266,6 +266,17 @@ class PostgresConnection:
     def close(self):
         if self._conn is not None:
             conn, self._conn = self._conn, None
+            # SELECTs tambem abrem transacao no psycopg. Devolver uma conexao
+            # INTRANS faz o pool emitir warning e executar rollback por conta
+            # propria. Limpamos explicitamente antes de devolve-la.
+            try:
+                if int(conn.info.transaction_status) != 0:
+                    conn.rollback()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
             self._pool.putconn(conn)
 
     def __enter__(self):

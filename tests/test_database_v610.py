@@ -11,7 +11,7 @@ from services.database_migration_service import inspect_sqlite_source
 
 
 class DatabaseV610Tests(unittest.TestCase):
-    def test_schema_20_e_auditoria_sqlite(self):
+    def test_schema_21_e_auditoria_sqlite(self):
         with tempfile.TemporaryDirectory() as tmp:
             old_path = database.DB_PATH
             old_backend = database.DATABASE_BACKEND
@@ -19,7 +19,7 @@ class DatabaseV610Tests(unittest.TestCase):
             database.DB_PATH = Path(tmp) / "v610.db"
             try:
                 database.criar_tabelas()
-                self.assertEqual(database.SCHEMA_VERSION, 20)
+                self.assertEqual(database.SCHEMA_VERSION, 21)
                 conn = database.conectar()
                 try:
                     row = conn.execute(
@@ -29,7 +29,7 @@ class DatabaseV610Tests(unittest.TestCase):
                     versao = conn.execute(
                         "SELECT valor FROM schema_meta WHERE chave='schema_version'"
                     ).fetchone()[0]
-                    self.assertEqual(versao, "20")
+                    self.assertEqual(versao, "21")
                 finally:
                     conn.close()
             finally:
@@ -93,7 +93,7 @@ class DatabaseV610Tests(unittest.TestCase):
                 database.criar_tabelas()
                 report = inspect_sqlite_source(path)
                 self.assertEqual(report["quick_check"], "ok")
-                self.assertEqual(str(report["schema_version"]), "20")
+                self.assertEqual(str(report["schema_version"]), "21")
                 self.assertIn("pessoas", report["rows"])
             finally:
                 database.DB_PATH = old_path

@@ -1,5 +1,21 @@
 # Changelog
 
+## V6.11 — Agente local da academia
+
+- Schema atualizado para **21** com `agentes_locais`, `agente_comandos` e `agente_eventos`.
+- Registro seguro de agente usando `AGENT_API_TOKEN` apenas como segredo de bootstrap.
+- Cada máquina recebe token individual; o backend armazena somente SHA-256 e permite revogação/rotação.
+- Heartbeat persistente com hostname, machine id, versão, capacidades, fila offline e idade do cache.
+- Sincronização autenticada do cache mínimo de acesso (alunos, encodings, configurações e catracas).
+- Motor local de reconhecimento/autorização com decisão cloud quando online e fallback fail-closed por cache expirado.
+- Outbox SQLite persistente no agente para reenviar eventos quando a internet retornar, com idempotência por UUID.
+- Comandos cloud → agente: `PING`, `SYNC_ACCESS`, `REFRESH_CONFIG` e `TEST_TURNSTILE`, com ACK/FAILED.
+- Painel administrativo `/agentes` para status online/offline, fila, cache e comandos operacionais.
+- `python -m agent.main --once --sync` e `--diagnose` adicionados para instalação/diagnóstico.
+- `python manage.py agent-status` adicionado no backend.
+- Migração SQLite → PostgreSQL passa a incluir as tabelas de agentes.
+- **8 novos testes**, levando a suíte para **51 testes**.
+
 ## V6.10 — PostgreSQL + persistência cloud
 
 - Schema atualizado para **20** com auditoria `database_migrations`.

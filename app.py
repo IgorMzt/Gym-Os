@@ -1,7 +1,7 @@
 """Aplicacao Flask do Gym OS.
 
-V6.10: app factory e runtime multi-banco com SQLite/PostgreSQL, mantendo a
-separacao entre backend cloud e futuro agente local da academia.
+V6.11: backend cloud + agente local autenticado, com fila offline, comandos e
+cache de acesso, mantendo SQLite/PostgreSQL compativeis.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import database
 from core.logging_config import configure_logging
 from core.settings import Settings
 from routes.aluno_app import aluno_app_bp
+from routes.agentes import agentes_bp
 from routes.auth import auth_bp
 from routes.avaliacoes import avaliacoes_bp
 from routes.dashboard import dashboard_bp
@@ -179,6 +180,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(professores_bp)
     app.register_blueprint(aluno_app_bp)
+    app.register_blueprint(agentes_bp)
     app.register_blueprint(avaliacoes_bp)
     app.register_blueprint(execucoes_bp)
     app.register_blueprint(treinos_bp)

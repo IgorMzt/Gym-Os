@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.10 ativa PostgreSQL**, pool de conexões e migração controlada do SQLite, mantendo SQLite disponível para desenvolvimento/local.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.11 adiciona o agente local da academia**, conectado ao backend PostgreSQL/cloud com heartbeat, cache offline, fila de eventos e comandos.
 
 ## Visão geral
 
@@ -44,7 +44,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 ├── wsgi.py                    # Entrada WSGI para ambiente Linux/cloud
 ├── manage.py                  # config, banco e migração SQLite → PostgreSQL
 ├── core/                      # Configuração, logging e adapter PostgreSQL
-├── agent/                     # Base do futuro agente local (heartbeat)
+├── agent/                     # Agente local: cache, fila, acesso e hardware
 ├── database.py                # Persistência compatível com SQLite/PostgreSQL
 ├── config_service.py          # Configurações operacionais
 ├── device_manager.py          # Integração/abstração dos dispositivos de acesso
@@ -108,7 +108,7 @@ python -c "import dlib, face_recognition, cv2, numpy; print('dlib:', dlib.__vers
 
 O projeto carrega automaticamente o arquivo `.env` da raiz usando `python-dotenv`. No pacote local há um `.env` pronto para edição e o Git o ignora; no repositório deve existir apenas o `.env.example`.
 
-A V6.10 mantém a separação por ambiente/papel e adiciona seleção real do backend de banco. Para desenvolvimento local, os valores principais são:
+A V6.11 mantém a separação por ambiente/papel e o backend dual da V6.10. Para desenvolvimento local, os valores principais são:
 
 ```env
 APP_ENV=development
@@ -188,12 +188,12 @@ python manage.py migrate-sqlite --source perfis.db
 python manage.py db-status
 ```
 
-O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 20, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
+O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 21, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
 
 Para testar um PostgreSQL já configurado também existe:
 
 ```powershell
-python scripts/postgres_smoke.py
+python -m scripts.postgres_smoke
 ```
 
 ## Banco e preparação de produção — V6.10
@@ -220,7 +220,24 @@ GET /health        # compatibilidade com o health check anterior
 
 A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` continua intencional até a V6.12, quando uploads/biometria serão movidos para storage apropriado.
 
-O diretório `agent/` já possui um heartbeat autenticado para preparar a separação do computador da academia. Câmera, reconhecimento facial e catraca só serão movidos efetivamente para esse processo na V6.11.
+## Agente local — V6.11
+
+O diretório `agent/` agora implementa o processo local da academia. O segredo `AGENT_API_TOKEN` serve apenas para o **registro/bootstrap**; o backend emite um token individual por máquina e persiste somente seu hash.
+
+Fluxo básico de teste, com o backend já iniciado:
+
+```powershell
+$env:AGENT_SERVER_URL="http://127.0.0.1:5000"
+$env:AGENT_API_TOKEN="mesmo-bootstrap-do-backend"
+$env:AGENT_UID="academia-principal-pc01"
+python -m agent.main --once --sync
+python -m agent.main --diagnose
+python manage.py agent-status
+```
+
+O agente mantém um `agent_state.db` local (ignorado pelo Git) com cache de acesso e outbox. Se a internet cair, decisões podem usar o cache por uma janela limitada; quando o cache expira, o acesso **falha fechado**. Eventos offline são enviados de forma idempotente quando a conexão retorna.
+
+O painel **Sistema → Agentes locais** mostra heartbeat, fila, idade do cache e permite enfileirar `PING`, sincronização e teste de catraca. O modo `SIMULADA` funciona sem hardware; adaptadores HTTP/SERIAL/HARDWARE ainda precisam ser implementados conforme o modelo físico da catraca utilizada.
 
 Para um futuro servidor Linux/cloud, existe `wsgi.py` e `requirements-prod.txt`. O servidor de desenvolvimento `python app.py` continua sendo o fluxo local.
 
@@ -282,7 +299,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V6.10 já permite executar o backend com PostgreSQL e migrar o banco legado. Ainda **não é a release de produção completa**: uploads/biometria continuam locais até a V6.12 e câmera/catraca continuam no processo atual até o agente local da V6.11.
+A V6.11 separa a comunicação do agente local e mantém reconhecimento/acionamento no PC da academia. Ainda **não é a release de produção completa**: uploads/biometria serão endurecidos na V6.12, multiacademia entra na V6.13 e adaptadores de catraca física dependem do equipamento escolhido.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -292,8 +309,8 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 
 - V6.1–V6.8: modularização, API mobile, app Expo, treinos, histórico, evolução, financeiro, push e experiência mobile;
 - V6.9: preparação de produção/cloud;
-- **V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL**;
-- V6.11: agente local com câmera, reconhecimento facial e catraca;
+- V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL;
+- **V6.11: agente local, cache offline, fila e comandos cloud ↔ academia**;
 - V6.12: storage cloud + tratamento de biometria;
 - V6.13: multiacademia/multiunidade;
 - V6.14: administração SaaS;

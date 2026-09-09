@@ -7,6 +7,7 @@ import shutil
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -17,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 IntegrityError = database_backend.integrity_error_types()
 
 
@@ -328,6 +329,11 @@ def _criar_tabelas_postgresql():
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-20-postgresql", "V6.10", "Schema PostgreSQL inicializado."),
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-21-agent-local", "V6.11", "Schema do agente local inicializado."),
         )
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
@@ -778,6 +784,69 @@ def criar_tabelas():
         _adicionar_coluna(conn, "treino_sessoes", "percepcao_esforco", "INTEGER")
         _adicionar_coluna(conn, "treino_sessoes", "feedback_mobile", "TEXT")
 
+        # V6.11 — agentes locais, comandos cloud -> agente e eventos agente -> cloud.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agentes_locais (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_uid TEXT NOT NULL UNIQUE,
+                nome TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                machine_id TEXT,
+                hostname TEXT,
+                plataforma TEXT,
+                app_version TEXT,
+                capabilities_json TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                last_ip TEXT,
+                last_seen_at TEXT,
+                queue_depth INTEGER NOT NULL DEFAULT 0,
+                cache_age_seconds INTEGER,
+                registered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                token_rotated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agentes_ativo_seen ON agentes_locais(ativo,last_seen_at)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agente_comandos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL,
+                command_uuid TEXT NOT NULL UNIQUE,
+                tipo TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'PENDING'
+                    CHECK (status IN ('PENDING','DELIVERED','ACKED','FAILED')),
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                delivered_at TEXT,
+                acked_at TEXT,
+                result_json TEXT,
+                expires_at TEXT,
+                FOREIGN KEY (agent_id) REFERENCES agentes_locais(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agente_comandos_pendentes ON agente_comandos(agent_id,status,id)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agente_eventos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id INTEGER NOT NULL,
+                event_uuid TEXT NOT NULL UNIQUE,
+                tipo TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                occurred_at TEXT,
+                received_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                processed INTEGER NOT NULL DEFAULT 0,
+                processing_error TEXT,
+                FOREIGN KEY (agent_id) REFERENCES agentes_locais(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agente_eventos_agent_data ON agente_eventos(agent_id,id DESC)")
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS logs_admin (
@@ -816,6 +885,10 @@ def criar_tabelas():
         conn.execute(
             "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
             ("schema-20-dual-database", "V6.10", "Schema preparado para SQLite/PostgreSQL."),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-21-agent-local", "V6.11", "Agentes locais, comandos e eventos sincronizados."),
         )
         conn.execute(
             """
@@ -3689,5 +3762,364 @@ def salvar_feedback_mobile(sessao_id: int, pessoa_id: int, percepcao_esforco: in
         )
         conn.commit()
         return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+# ---------- Agente local / cloud bridge (Schema 21) ----------
+
+def registrar_agente(*, agent_uid: str, nome: str, token_hash: str, machine_id=None, hostname=None,
+                     plataforma=None, app_version=None, capabilities=None, ip=None):
+    uid = str(agent_uid or "").strip()[:120]
+    if not uid:
+        raise ValueError("agent_uid obrigatorio.")
+    conn = conectar()
+    try:
+        conn.execute(
+            """
+            INSERT INTO agentes_locais(
+                agent_uid,nome,token_hash,machine_id,hostname,plataforma,app_version,
+                capabilities_json,ativo,last_ip,registered_at,token_rotated_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+            ON CONFLICT(agent_uid) DO UPDATE SET
+                nome=excluded.nome, token_hash=excluded.token_hash, machine_id=excluded.machine_id,
+                hostname=excluded.hostname, plataforma=excluded.plataforma, app_version=excluded.app_version,
+                capabilities_json=excluded.capabilities_json, ativo=1, last_ip=excluded.last_ip,
+                token_rotated_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+            """,
+            (uid, str(nome or uid)[:120], str(token_hash), machine_id, hostname, plataforma, app_version,
+             json.dumps(capabilities or {}, ensure_ascii=False), ip),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM agentes_locais WHERE agent_uid=?", (uid,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def obter_agente_por_token_hash(token_hash: str):
+    conn = conectar()
+    try:
+        row = conn.execute(
+            "SELECT * FROM agentes_locais WHERE token_hash=? AND ativo=1",
+            (str(token_hash),),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def obter_agente(agent_id: int):
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM agentes_locais WHERE id=?", (int(agent_id),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def atualizar_heartbeat_agente(agent_id: int, *, hostname=None, machine_id=None, plataforma=None,
+                               app_version=None, capabilities=None, ip=None, queue_depth=None,
+                               cache_age_seconds=None):
+    conn = conectar()
+    try:
+        atual = conn.execute("SELECT * FROM agentes_locais WHERE id=? AND ativo=1", (int(agent_id),)).fetchone()
+        if not atual:
+            return None
+        caps = json.dumps(capabilities, ensure_ascii=False) if capabilities is not None else atual["capabilities_json"]
+        try:
+            qdepth = max(0, int(queue_depth)) if queue_depth is not None else int(atual["queue_depth"] or 0)
+        except (TypeError, ValueError):
+            qdepth = int(atual["queue_depth"] or 0)
+        try:
+            cage = max(0, int(cache_age_seconds)) if cache_age_seconds is not None else atual["cache_age_seconds"]
+        except (TypeError, ValueError):
+            cage = atual["cache_age_seconds"]
+        conn.execute(
+            """
+            UPDATE agentes_locais SET
+                hostname=COALESCE(?,hostname), machine_id=COALESCE(?,machine_id),
+                plataforma=COALESCE(?,plataforma), app_version=COALESCE(?,app_version),
+                capabilities_json=?, last_ip=COALESCE(?,last_ip), last_seen_at=CURRENT_TIMESTAMP,
+                queue_depth=?, cache_age_seconds=?, updated_at=CURRENT_TIMESTAMP
+            WHERE id=? AND ativo=1
+            """,
+            (hostname, machine_id, plataforma, app_version, caps, ip, qdepth, cage, int(agent_id)),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM agentes_locais WHERE id=?", (int(agent_id),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _parse_db_timestamp(value):
+    if not value:
+        return None
+    try:
+        if isinstance(value, datetime):
+            return value
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _timestamp_age_seconds(value, now_value) -> int | None:
+    dt = _parse_db_timestamp(value)
+    agora = _parse_db_timestamp(now_value)
+    if not dt or not agora:
+        return None
+    # Os campos historicos continuam TEXT. Quando um lado possui offset e o
+    # outro nao, o valor sem offset veio do mesmo relogio/timezone do banco.
+    if dt.tzinfo is None and agora.tzinfo is not None:
+        dt = dt.replace(tzinfo=agora.tzinfo)
+    elif agora.tzinfo is None and dt.tzinfo is not None:
+        agora = agora.replace(tzinfo=dt.tzinfo)
+    if dt.tzinfo is not None and agora.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+        agora = agora.astimezone(timezone.utc)
+    return int((agora - dt).total_seconds())
+
+
+def listar_agentes(offline_after_seconds: int = 90):
+    conn = conectar()
+    try:
+        rows = [dict(r) for r in conn.execute("SELECT * FROM agentes_locais ORDER BY id DESC").fetchall()]
+        agora_row = conn.execute("SELECT CURRENT_TIMESTAMP AS agora").fetchone()
+        agora_db = agora_row["agora"] if agora_row else None
+    finally:
+        conn.close()
+    limite = max(15, int(offline_after_seconds))
+    for row in rows:
+        age = _timestamp_age_seconds(row.get("last_seen_at"), agora_db)
+        row["last_seen_age_seconds"] = max(0, age) if age is not None else None
+        if not row.get("ativo"):
+            row["status_operacional"] = "REVOKED"
+        elif age is not None and age <= limite:
+            row["status_operacional"] = "ONLINE"
+        else:
+            row["status_operacional"] = "OFFLINE"
+        try:
+            row["capabilities"] = json.loads(row.get("capabilities_json") or "{}")
+        except Exception:
+            row["capabilities"] = {}
+        row.pop("token_hash", None)
+    return rows
+
+
+def revogar_agente(agent_id: int) -> bool:
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            "UPDATE agentes_locais SET ativo=0,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (int(agent_id),),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def criar_comando_agente(agent_id: int, tipo: str, payload=None, command_uuid=None, expires_at=None):
+    import uuid as _uuid
+    command_uuid = str(command_uuid or _uuid.uuid4())[:80]
+    tipo = str(tipo or "").strip().upper()[:80]
+    if not tipo:
+        raise ValueError("Tipo de comando obrigatorio.")
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO agente_comandos(agent_id,command_uuid,tipo,payload_json,status,expires_at)
+            VALUES(?,?,?,?,'PENDING',?)
+            """,
+            (int(agent_id), command_uuid, tipo, json.dumps(payload or {}, ensure_ascii=False), expires_at),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM agente_comandos WHERE id=?", (cur.lastrowid,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def buscar_comandos_agente(agent_id: int, limite: int = 20):
+    conn = conectar()
+    try:
+        rows = conn.execute(
+            """
+            SELECT * FROM agente_comandos
+            WHERE agent_id=? AND status IN ('PENDING','DELIVERED')
+              AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+            ORDER BY id LIMIT ?
+            """,
+            (int(agent_id), max(1, min(int(limite), 50))),
+        ).fetchall()
+        ids = [int(r["id"]) for r in rows]
+        for cid in ids:
+            conn.execute(
+                "UPDATE agente_comandos SET status='DELIVERED',delivered_at=COALESCE(delivered_at,CURRENT_TIMESTAMP) WHERE id=?",
+                (cid,),
+            )
+        conn.commit()
+        saida = []
+        for r in rows:
+            item = dict(r)
+            try:
+                item["payload"] = json.loads(item.get("payload_json") or "{}")
+            except Exception:
+                item["payload"] = {}
+            item["type"] = item.get("tipo")
+            item.pop("payload_json", None)
+            saida.append(item)
+        return saida
+    finally:
+        conn.close()
+
+
+def confirmar_comando_agente(agent_id: int, command_uuid: str, *, ok: bool, result=None) -> bool:
+    conn = conectar()
+    try:
+        status = "ACKED" if ok else "FAILED"
+        cur = conn.execute(
+            """
+            UPDATE agente_comandos SET status=?,acked_at=CURRENT_TIMESTAMP,result_json=?
+            WHERE agent_id=? AND command_uuid=?
+            """,
+            (status, json.dumps(result or {}, ensure_ascii=False), int(agent_id), str(command_uuid)),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def listar_comandos_agente(agent_id: int, limite: int = 30):
+    conn = conectar()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM agente_comandos WHERE agent_id=? ORDER BY id DESC LIMIT ?",
+            (int(agent_id), max(1, min(int(limite), 100))),
+        ).fetchall()]
+    finally:
+        conn.close()
+
+
+def registrar_evento_agente(agent_id: int, event_uuid: str, tipo: str, payload: dict, occurred_at=None) -> bool:
+    conn = conectar()
+    try:
+        try:
+            conn.execute(
+                """
+                INSERT INTO agente_eventos(agent_id,event_uuid,tipo,payload_json,occurred_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (int(agent_id), str(event_uuid)[:80], str(tipo)[:80],
+                 json.dumps(payload or {}, ensure_ascii=False), occurred_at),
+            )
+            conn.commit()
+            return True
+        except IntegrityError:
+            conn.rollback()
+            return False
+    finally:
+        conn.close()
+
+
+def obter_evento_agente(event_uuid: str):
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM agente_eventos WHERE event_uuid=?", (str(event_uuid),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def marcar_evento_agente_processado(event_uuid: str, erro=None) -> None:
+    conn = conectar()
+    try:
+        conn.execute(
+            "UPDATE agente_eventos SET processed=?,processing_error=? WHERE event_uuid=?",
+            (0 if erro else 1, str(erro)[:1000] if erro else None, str(event_uuid)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def listar_eventos_agente(agent_id: int, limite: int = 50):
+    conn = conectar()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM agente_eventos WHERE agent_id=? ORDER BY id DESC LIMIT ?",
+            (int(agent_id), max(1, min(int(limite), 200))),
+        ).fetchall()]
+    finally:
+        conn.close()
+
+
+def _normalizar_data_hora_evento_agente(value):
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if dt.tzinfo is not None:
+            try:
+                tz = ZoneInfo(os.getenv("APP_TIMEZONE") or "America/Sao_Paulo")
+            except Exception:
+                tz = timezone.utc
+            dt = dt.astimezone(tz).replace(tzinfo=None)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        # Nao mistura formatos arbitrarios no historico; deixa o banco gerar
+        # CURRENT_TIMESTAMP se a data recebida nao puder ser interpretada.
+        return None
+
+
+def registrar_log_evento_agente(payload: dict, occurred_at=None) -> bool:
+    pessoa_id = payload.get("pessoa_id")
+    nome = str(payload.get("nome") or "Desconhecido")[:160]
+    status = str(payload.get("status") or "NEGADO").upper()[:30]
+    motivo = str(payload.get("motivo") or "Evento do agente")[:500]
+    data_hora = _normalizar_data_hora_evento_agente(occurred_at)
+    conn = conectar()
+    try:
+        if pessoa_id is not None:
+            existe = conn.execute("SELECT id FROM pessoas WHERE id=?", (pessoa_id,)).fetchone()
+            if not existe:
+                # O aluno pode ter sido removido enquanto o agente estava
+                # offline. Preservamos o historico sem violar a FK.
+                pessoa_id = None
+        if data_hora:
+            cur = conn.execute(
+                """
+                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,data_hora,catraca_id,catraca_nome)
+                VALUES(?,?,?,?,?,?,?,?,?)
+                """,
+                (pessoa_id, nome, payload.get("cpf"), payload.get("matricula"), status, motivo,
+                 data_hora, payload.get("catraca_id"), payload.get("catraca_nome")),
+            )
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,catraca_id,catraca_nome)
+                VALUES(?,?,?,?,?,?,?,?)
+                """,
+                (pessoa_id, nome, payload.get("cpf"), payload.get("matricula"), status, motivo,
+                 payload.get("catraca_id"), payload.get("catraca_nome")),
+            )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def contar_comandos_pendentes_agente(agent_id: int) -> int:
+    conn = conectar()
+    try:
+        return int(conn.execute(
+            "SELECT COUNT(*) FROM agente_comandos WHERE agent_id=? AND status IN ('PENDING','DELIVERED') "
+            "AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)",
+            (int(agent_id),),
+        ).fetchone()[0] or 0)
     finally:
         conn.close()

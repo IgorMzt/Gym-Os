@@ -89,12 +89,24 @@ def migrate_sqlite(args) -> int:
         return 1
 
 
+
+def agent_status() -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    print(json.dumps({
+        "ok": True,
+        "version": "6.11",
+        "agents": database.listar_agentes(),
+    }, indent=2, ensure_ascii=False))
+    return 0
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="python manage.py")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check-config", help="Valida configuracao por ambiente.")
     sub.add_parser("init-db", help="Cria/atualiza o schema no backend configurado.")
     sub.add_parser("db-status", help="Testa conexao, schema e integridade do banco.")
+    sub.add_parser("agent-status", help="Lista agentes locais e estado de heartbeat.")
 
     mig = sub.add_parser("migrate-sqlite", help="Migra perfis.db para PostgreSQL.")
     mig.add_argument("--source", default="perfis.db", help="Caminho do banco SQLite de origem.")
@@ -113,6 +125,8 @@ def main() -> int:
         return init_db()
     if args.command == "db-status":
         return db_status()
+    if args.command == "agent-status":
+        return agent_status()
     return migrate_sqlite(args)
 
 
