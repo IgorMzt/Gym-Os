@@ -58,11 +58,15 @@ class Settings:
     app_timezone: str
     storage_backend: str
     storage_local_dir: str
+    storage_bucket: str
+    storage_region: str
+    storage_endpoint_url: str
+    storage_signed_url_ttl: int
     log_level: str
     log_dir: str
     enable_local_hardware: bool
     agent_api_token: str
-    app_version: str = "6.11"
+    app_version: str = "6.12"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -92,6 +96,10 @@ class Settings:
             app_timezone=(os.getenv("APP_TIMEZONE") or "America/Sao_Paulo").strip(),
             storage_backend=(os.getenv("STORAGE_BACKEND") or "local").strip().lower(),
             storage_local_dir=(os.getenv("STORAGE_LOCAL_DIR") or "").strip(),
+            storage_bucket=(os.getenv("STORAGE_BUCKET") or "").strip(),
+            storage_region=(os.getenv("STORAGE_REGION") or "").strip(),
+            storage_endpoint_url=(os.getenv("STORAGE_ENDPOINT_URL") or "").strip(),
+            storage_signed_url_ttl=_int_env("STORAGE_SIGNED_URL_TTL", 300, 30, 3600),
             log_level=(os.getenv("LOG_LEVEL") or "INFO").strip().upper(),
             log_dir=(os.getenv("LOG_DIR") or "").strip(),
             enable_local_hardware=_bool_env("ENABLE_LOCAL_HARDWARE", local_default),
@@ -115,6 +123,8 @@ class Settings:
             raise ValueError("DATABASE_BACKEND deve ser sqlite ou postgresql.")
         if self.storage_backend not in {"local", "object"}:
             raise ValueError("STORAGE_BACKEND deve ser local ou object.")
+        if self.storage_backend == "object" and not self.storage_bucket:
+            raise ValueError("STORAGE_BUCKET e obrigatorio quando STORAGE_BACKEND=object.")
         if self.database_backend == "postgresql" and not self.database_url:
             raise ValueError("DATABASE_URL e obrigatoria quando DATABASE_BACKEND=postgresql.")
         if self.database_pool_min > self.database_pool_max:

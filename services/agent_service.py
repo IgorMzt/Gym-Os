@@ -76,6 +76,7 @@ def heartbeat(agente: dict, dados: dict, ip: str | None = None) -> dict:
 def access_snapshot() -> dict:
     pessoas = database.listar_pessoas()
     amostras = database.listar_amostras_faciais()
+    perfis_biometricos = database.listar_perfis_biometricos()
     payload_pessoas = []
     for pessoa in pessoas:
         item = {
@@ -88,6 +89,7 @@ def access_snapshot() -> dict:
             "data_vencimento": pessoa.get("data_vencimento"),
             "status_financeiro": database.status_financeiro_efetivo(pessoa),
             "liberado": bool(pessoa.get("liberado")),
+            "biometric_version": int((perfis_biometricos.get(int(pessoa["id"])) or {}).get("version") or 0),
             "encodings": [enc.tolist() for enc in amostras.get(int(pessoa["id"]), [])],
         }
         if not item["encodings"] and pessoa.get("encoding") is not None:
@@ -108,8 +110,15 @@ def access_snapshot() -> dict:
     digest = hashlib.sha256(
         json.dumps(base, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     ).hexdigest()
+    biometric_digest = hashlib.sha256(
+        json.dumps(
+            [(p["id"], p.get("biometric_version", 0), p.get("encodings", [])) for p in payload_pessoas],
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
     return {
         "sync_version": digest,
+        "biometric_sync_version": biometric_digest,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         **base,
     }

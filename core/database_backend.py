@@ -22,6 +22,7 @@ IDENTITY_TABLES = {
     "avaliacoes_fisicas", "aluno_acessos", "mobile_refresh_tokens",
     "mobile_push_devices", "agentes_locais", "agente_comandos", "agente_eventos",
     "logs_admin", "cobrancas", "cobranca_eventos", "catracas", "database_migrations",
+    "storage_objects",
 }
 
 

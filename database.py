@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 IntegrityError = database_backend.integrity_error_types()
 
 
@@ -334,6 +334,11 @@ def _criar_tabelas_postgresql():
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-21-agent-local", "V6.11", "Schema do agente local inicializado."),
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-22-storage-biometria", "V6.12", "Storage privado, metadados e biometria versionada."),
         )
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
@@ -847,6 +852,58 @@ def criar_tabelas():
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_agente_eventos_agent_data ON agente_eventos(agent_id,id DESC)")
 
+        # V6.12 — metadados de storage privado e versionamento da biometria.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS storage_objects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referencia TEXT NOT NULL UNIQUE,
+                object_key TEXT NOT NULL UNIQUE,
+                backend TEXT NOT NULL,
+                bucket TEXT,
+                categoria TEXT NOT NULL DEFAULT 'geral',
+                content_type TEXT,
+                size_bytes INTEGER NOT NULL DEFAULT 0,
+                sha256 TEXT,
+                owner_type TEXT,
+                owner_id INTEGER,
+                retention_until TEXT,
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+                    CHECK (status IN ('ACTIVE','DELETED')),
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                deleted_at TEXT
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_storage_owner ON storage_objects(owner_type,owner_id,status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_storage_retention ON storage_objects(status,retention_until)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS biometric_profiles (
+                pessoa_id INTEGER PRIMARY KEY,
+                version INTEGER NOT NULL DEFAULT 1,
+                sample_count INTEGER NOT NULL DEFAULT 0,
+                source_reference TEXT,
+                status TEXT NOT NULL DEFAULT 'ACTIVE'
+                    CHECK (status IN ('ACTIVE','EMPTY','DELETED')),
+                retention_until TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                deleted_at TEXT,
+                FOREIGN KEY (pessoa_id) REFERENCES pessoas(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO biometric_profiles(pessoa_id,version,sample_count,source_reference,status)
+            SELECT p.id,1,COUNT(f.id),p.foto_path,CASE WHEN COUNT(f.id)>0 THEN 'ACTIVE' ELSE 'EMPTY' END
+            FROM pessoas p LEFT JOIN face_encodings f ON f.pessoa_id=p.id
+            GROUP BY p.id,p.foto_path
+            ON CONFLICT(pessoa_id) DO NOTHING
+            """
+        )
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS logs_admin (
@@ -889,6 +946,10 @@ def criar_tabelas():
         conn.execute(
             "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
             ("schema-21-agent-local", "V6.11", "Agentes locais, comandos e eventos sincronizados."),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-22-storage-biometria", "V6.12", "Storage privado, metadados e biometria versionada."),
         )
         conn.execute(
             """
@@ -1078,6 +1139,24 @@ def _encoding_de_json(encoding_json: str) -> np.ndarray:
     return np.array(json.loads(encoding_json), dtype=float)
 
 
+def _upsert_perfil_biometrico(conn, pessoa_id: int, sample_count: int, source_reference=None):
+    status = "ACTIVE" if int(sample_count or 0) > 0 else "EMPTY"
+    conn.execute(
+        """
+        INSERT INTO biometric_profiles(pessoa_id,version,sample_count,source_reference,status,updated_at,deleted_at)
+        VALUES(?,1,?,?,?,CURRENT_TIMESTAMP,NULL)
+        ON CONFLICT(pessoa_id) DO UPDATE SET
+            version=biometric_profiles.version+1,
+            sample_count=excluded.sample_count,
+            source_reference=COALESCE(excluded.source_reference,biometric_profiles.source_reference),
+            status=excluded.status,
+            updated_at=CURRENT_TIMESTAMP,
+            deleted_at=NULL
+        """,
+        (int(pessoa_id), int(sample_count or 0), source_reference, status),
+    )
+
+
 def adicionar_pessoa(dados, encodings=None, foto_path=None, liberado=True):
     if isinstance(dados, str):
         nome = dados.strip()
@@ -1122,6 +1201,7 @@ def adicionar_pessoa(dados, encodings=None, foto_path=None, liberado=True):
             "INSERT INTO face_encodings (pessoa_id, encoding, ordem) VALUES (?, ?, ?)",
             [(pessoa_id, _encoding_para_json(enc), ordem) for ordem, enc in enumerate(encodings, 1)],
         )
+        _upsert_perfil_biometrico(conn, pessoa_id, len(encodings), foto_path)
         conn.commit()
         return pessoa_id
     except Exception:
@@ -1168,6 +1248,9 @@ def atualizar_amostras_e_foto(pessoa_id: int, encodings: Iterable[np.ndarray] | 
             )
             if encodings:
                 conn.execute("UPDATE pessoas SET encoding = ? WHERE id = ?", (_encoding_para_json(encodings[0]), pessoa_id))
+            else:
+                conn.execute("UPDATE pessoas SET encoding = NULL WHERE id = ?", (pessoa_id,))
+            _upsert_perfil_biometrico(conn, pessoa_id, len(encodings), foto_path)
         conn.commit()
     finally:
         conn.close()
@@ -1242,6 +1325,119 @@ def listar_amostras_faciais():
         for row in rows:
             por_pessoa.setdefault(int(row["pessoa_id"]), []).append(_encoding_de_json(row["encoding"]))
         return por_pessoa
+    finally:
+        conn.close()
+
+
+def registrar_storage_object(*, referencia: str, object_key: str, backend: str, bucket: str | None,
+                            categoria: str, content_type: str | None, size_bytes: int, sha256: str | None,
+                            owner_type=None, owner_id=None, retention_until=None) -> dict:
+    conn = conectar()
+    try:
+        conn.execute(
+            """
+            INSERT INTO storage_objects(
+                referencia,object_key,backend,bucket,categoria,content_type,size_bytes,sha256,
+                owner_type,owner_id,retention_until,status,updated_at,deleted_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL)
+            ON CONFLICT(referencia) DO UPDATE SET
+                object_key=excluded.object_key,backend=excluded.backend,bucket=excluded.bucket,
+                categoria=excluded.categoria,content_type=excluded.content_type,size_bytes=excluded.size_bytes,
+                sha256=excluded.sha256,owner_type=COALESCE(excluded.owner_type,storage_objects.owner_type),
+                owner_id=COALESCE(excluded.owner_id,storage_objects.owner_id),
+                retention_until=COALESCE(excluded.retention_until,storage_objects.retention_until),
+                status='ACTIVE',updated_at=CURRENT_TIMESTAMP,deleted_at=NULL
+            """,
+            (referencia,object_key,backend,bucket,categoria,content_type,int(size_bytes or 0),sha256,
+             owner_type,int(owner_id) if owner_id is not None else None,retention_until),
+        )
+        conn.commit()
+        return obter_storage_object(referencia) or {}
+    finally:
+        conn.close()
+
+
+def obter_storage_object(referencia: str) -> dict | None:
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM storage_objects WHERE referencia=?", (str(referencia),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def vincular_storage_object(referencia: str, *, owner_type: str, owner_id: int,
+                            categoria: str | None = None, retention_until=None) -> bool:
+    conn = conectar()
+    try:
+        if categoria:
+            cur = conn.execute(
+                """UPDATE storage_objects SET owner_type=?,owner_id=?,categoria=?,
+                   retention_until=COALESCE(?,retention_until),updated_at=CURRENT_TIMESTAMP
+                   WHERE referencia=? AND status='ACTIVE'""",
+                (str(owner_type)[:80],int(owner_id),str(categoria)[:80],retention_until,str(referencia)),
+            )
+        else:
+            cur = conn.execute(
+                """UPDATE storage_objects SET owner_type=?,owner_id=?,
+                   retention_until=COALESCE(?,retention_until),updated_at=CURRENT_TIMESTAMP
+                   WHERE referencia=? AND status='ACTIVE'""",
+                (str(owner_type)[:80],int(owner_id),retention_until,str(referencia)),
+            )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def marcar_storage_object_excluido(referencia: str) -> bool:
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            """UPDATE storage_objects SET status='DELETED',deleted_at=CURRENT_TIMESTAMP,
+               updated_at=CURRENT_TIMESTAMP WHERE referencia=? AND status<>'DELETED'""",
+            (str(referencia),),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def listar_storage_objects(*, status: str | None = None, owner_type: str | None = None, owner_id=None) -> list[dict]:
+    sql = "SELECT * FROM storage_objects WHERE 1=1"
+    params = []
+    if status:
+        sql += " AND status=?"
+        params.append(str(status).upper())
+    if owner_type:
+        sql += " AND owner_type=?"
+        params.append(str(owner_type))
+    if owner_id is not None:
+        sql += " AND owner_id=?"
+        params.append(int(owner_id))
+    sql += " ORDER BY id DESC"
+    conn = conectar()
+    try:
+        return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
+    finally:
+        conn.close()
+
+
+def obter_perfil_biometrico(pessoa_id: int) -> dict | None:
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM biometric_profiles WHERE pessoa_id=?", (int(pessoa_id),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def listar_perfis_biometricos() -> dict[int, dict]:
+    conn = conectar()
+    try:
+        rows = conn.execute("SELECT * FROM biometric_profiles").fetchall()
+        return {int(r["pessoa_id"]): dict(r) for r in rows}
     finally:
         conn.close()
 

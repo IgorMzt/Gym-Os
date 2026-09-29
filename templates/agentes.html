@@ -29,7 +29,8 @@
           <td>{{ a.app_version or '—' }}</td>
           <td>
             <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'PING')">Ping</button>
-            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'SYNC_ACCESS')">Sincronizar</button>
+            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'SYNC_ACCESS')">Sincronizar acesso</button>
+            <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'SYNC_BIOMETRICS')">Sincronizar biometria</button>
             <button class="btn btn--outline btn--pequeno" onclick="comando({{ a.id }}, 'TEST_TURNSTILE')">Testar catraca</button>
           </td>
         </tr>

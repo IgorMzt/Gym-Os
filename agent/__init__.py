@@ -1,1 +1,1 @@
-"""Agente local do Gym OS. Hardware real sera conectado na V6.11."""
+"""Agente local do Gym OS com cache biometrico versionado e operacao offline."""

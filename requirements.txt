@@ -19,3 +19,6 @@ face-recognition-models==0.3.0
 # V6.10: PostgreSQL + pool de conexoes.
 psycopg[binary]>=3.2,<4
 psycopg-pool>=3.2,<4
+
+# V6.12: object storage privado S3/MinIO compativel.
+boto3>=1.35,<2

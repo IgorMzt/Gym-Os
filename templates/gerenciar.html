@@ -58,7 +58,7 @@
           data-inadimplentes="{{ 1 if pessoa.filtro_inadimplente else 0 }}">
         <td>
           <a class="table-person table-person--link" href="{{ url_for('operacoes.pagina_aluno', pessoa_id=pessoa.id) }}">
-            <div class="avatar avatar--photo">{% if pessoa.foto_path %}<img src="{{ url_for('static', filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+            <div class="avatar avatar--photo">{% if pessoa.foto_path %}<img src="{{ media_url(pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
             <div><strong>{{ pessoa.nome }}</strong><small>{{ pessoa.cpf or 'CPF não informado' }}</small></div>
           </a>
         </td>
@@ -94,7 +94,7 @@
       data-bloqueados="{{ 1 if pessoa.filtro_bloqueado else 0 }}"
       data-inadimplentes="{{ 1 if pessoa.filtro_inadimplente else 0 }}">
     <div class="student-mobile-card__head">
-      <div class="avatar avatar--photo avatar--large">{% if pessoa.foto_path %}<img src="{{ url_for('static', filename=pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
+      <div class="avatar avatar--photo avatar--large">{% if pessoa.foto_path %}<img src="{{ media_url(pessoa.foto_path) }}" alt="">{% else %}{{ pessoa.nome[:1]|upper }}{% endif %}</div>
       <div class="student-mobile-card__identity"><strong>{{ pessoa.nome }}</strong><span>#{{ pessoa.matricula or '—' }}</span></div>
       <span class="student-status status--{{ pessoa.status_operacional|lower }}">{{ pessoa.status_operacional }}</span>
     </div>

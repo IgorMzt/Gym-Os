@@ -1,4 +1,4 @@
-"""Cliente HTTP do Gym OS Agent V6.11, sem dependencia externa."""
+"""Cliente HTTP do Gym OS Agent V6.12, sem dependencia externa."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def _request(server_url: str, path: str, *, token: str | None = None, method: st
              payload=None, timeout: float = 8.0) -> dict:
     url = server_url.rstrip("/") + path
     data = None if payload is None else json.dumps(payload).encode("utf-8")
-    headers = {"Accept": "application/json", "User-Agent": "GymOS-Agent/6.11"}
+    headers = {"Accept": "application/json", "User-Agent": "GymOS-Agent/6.12"}
     if data is not None:
         headers["Content-Type"] = "application/json"
     if token:

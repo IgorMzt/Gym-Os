@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, storage_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -63,7 +63,7 @@ def _aplicar_imagem_exercicio(dados, normalizado, atual=None):
         return antiga, None
     if imagem_base64:
         _, binario = decodificar_imagem(imagem_base64)
-        nova = salvar_foto(binario)
+        nova = salvar_foto(binario, "exercicios")
         normalizado["imagem_path"] = nova
         return antiga, nova
     return None, None
@@ -75,6 +75,8 @@ def api_obter_exercicio(exercicio_id):
     exercicio = database.obter_exercicio(exercicio_id)
     if not exercicio:
         return jsonify({"sucesso": False, "erro": "Exercício não encontrado."}), 404
+    exercicio = dict(exercicio)
+    exercicio["imagem_url"] = storage_service.url_temporaria(exercicio.get("imagem_path")) if exercicio.get("imagem_path") else None
     return jsonify({"sucesso": True, "exercicio": exercicio})
 
 
@@ -87,6 +89,8 @@ def api_criar_exercicio():
         normalizado = exercise_service.normalizar(dados)
         _, nova_imagem = _aplicar_imagem_exercicio(dados, normalizado)
         exercicio_id = database.criar_exercicio(normalizado, int(session.get("usuario_id")))
+        if nova_imagem:
+            storage_service.vincular_upload(nova_imagem, owner_type="exercicio", owner_id=exercicio_id, categoria="exercicios")
         database.registrar_log_admin(
             "EXERCICIO_CRIADO", str(exercicio_id), normalizado["nome"], _ip_cliente()
         )
@@ -115,6 +119,8 @@ def api_editar_exercicio(exercicio_id):
         normalizado = exercise_service.normalizar(dados, atual)
         antiga_imagem, nova_imagem = _aplicar_imagem_exercicio(dados, normalizado, atual)
         database.atualizar_exercicio(exercicio_id, normalizado)
+        if nova_imagem:
+            storage_service.vincular_upload(nova_imagem, owner_type="exercicio", owner_id=exercicio_id, categoria="exercicios")
         if antiga_imagem and (nova_imagem or parse_bool(dados.get("remover_imagem"), False)):
             limpar_foto(antiga_imagem)
         database.registrar_log_admin(

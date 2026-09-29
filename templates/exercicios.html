@@ -45,7 +45,7 @@
       data-ativo="{{ 1 if e.ativo else 0 }}">
       <div class="exercise-media-v54">
         {% if e.imagem_path %}
-        <img src="{{ url_for('static', filename=e.imagem_path) }}" alt="">
+        <img src="{{ media_url(e.imagem_path) }}" alt="">
         {% else %}
         <span>▦</span>
         {% endif %}

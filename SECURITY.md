@@ -8,7 +8,8 @@ A aplicação pode armazenar dados pessoais e biométricos. Banco SQLite, fotos,
 
 - `.env`
 - `perfis.db` e qualquer outro `*.db`
-- `static/uploads/*`
+- `static/uploads/*` (legado)
+- `storage/private/*`
 - `backups/`
 - logs de produção
 - chaves de API, tokens e senhas
@@ -56,7 +57,7 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Bancos com biometria, CPF e dados financeiros exigem controle de acesso mínimo, logs e segregação entre desenvolvimento e produção.
 
 
-## Agente local — V6.11
+## Agente local — V6.11/V6.12
 
 - Em produção, `AGENT_SERVER_URL` deve usar **HTTPS**; encodings biométricos não devem trafegar em HTTP público.
 - `agent_state.db` contém cache operacional e biométrico e deve receber as mesmas proteções de disco/usuário aplicadas ao banco principal.
@@ -65,4 +66,6 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Tokens individuais devem ser revogados quando uma máquina for perdida, formatada ou transferida.
 - Comandos cloud → agente são restritos a uma lista permitida; não existe execução arbitrária de shell.
 - Não exponha a API do agente diretamente à internet sem autenticação/reverse proxy apropriados.
-- A V6.12 revisará armazenamento, retenção e distribuição dos dados biométricos em profundidade.
+- Na V6.12, novos arquivos são privados por padrão e chegam ao navegador somente por URL temporária/assinada; o Agent recebe encodings mínimos, não fotos, para reconhecimento offline.
+- Use `storage-purge --dry-run` antes de aplicar retenções vencidas e defina políticas de retenção compatíveis com a finalidade/legalidade do tratamento.
+- Em object storage, mantenha o bucket privado, bloqueie acesso público, habilite criptografia/versionamento conforme o provedor e restrinja as credenciais ao menor conjunto de permissões necessário.

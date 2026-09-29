@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, storage_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -119,7 +119,7 @@ def _aplicar_foto_professor(dados, normalizado, atual=None):
         return antiga, None
     if foto_base64:
         _, binario = decodificar_imagem(foto_base64)
-        nova = salvar_foto(binario)
+        nova = salvar_foto(binario, "professores")
         normalizado["foto_path"] = nova
         return antiga, nova
     return None, None
@@ -134,6 +134,8 @@ def api_criar_professor():
         normalizado = _normalizar_professor(dados)
         _, nova_foto = _aplicar_foto_professor(dados, normalizado)
         professor_id = database.criar_professor(normalizado)
+        if nova_foto:
+            storage_service.vincular_upload(nova_foto, owner_type="professor", owner_id=professor_id, categoria="professores")
         database.registrar_log_admin("PROFESSOR_CRIADO", str(professor_id), normalizado["nome"], _ip_cliente())
         return jsonify({"sucesso": True, "id": professor_id, "redirect_url": url_for("professores.pagina_professor", professor_id=professor_id)})
     except ValueError as exc:
@@ -158,6 +160,8 @@ def api_editar_professor(professor_id):
         normalizado = _normalizar_professor(dados, atual)
         antiga_foto, nova_foto = _aplicar_foto_professor(dados, normalizado, atual)
         database.atualizar_professor(professor_id, normalizado)
+        if nova_foto:
+            storage_service.vincular_upload(nova_foto, owner_type="professor", owner_id=professor_id, categoria="professores")
         if antiga_foto and (nova_foto or parse_bool(dados.get("remover_foto"), False)):
             limpar_foto(antiga_foto)
         database.registrar_log_admin("PROFESSOR_ATUALIZADO", str(professor_id), normalizado["nome"], _ip_cliente())

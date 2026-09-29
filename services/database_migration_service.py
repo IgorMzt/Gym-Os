@@ -1,4 +1,4 @@
-"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.10)."""
+"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.12)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ TABLE_ORDER = [
     "professores",
     "professor_alunos",
     "face_encodings",
+    "biometric_profiles",
+    "storage_objects",
     "exercicios",
     "fichas_treino",
     "treinos",
@@ -49,6 +51,8 @@ PRIMARY_KEYS = {
     "professores": ["id"],
     "professor_alunos": ["id"],
     "face_encodings": ["id"],
+    "biometric_profiles": ["pessoa_id"],
+    "storage_objects": ["id"],
     "exercicios": ["id"],
     "fichas_treino": ["id"],
     "treinos": ["id"],
@@ -218,7 +222,20 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
             dst.executemany(_upsert_sql(table, columns), values)
             copied[table] = len(values)
 
-        # A fonte pode estar em schema anterior; o destino V6.11 sempre termina no schema atual.
+        # Fontes V6.11 ou anteriores nao possuem biometric_profiles. Como o schema
+        # do destino e criado antes da copia, o backfill inicial ainda nao encontra
+        # pessoas. Refazemos o preenchimento depois que pessoas/encodings chegaram.
+        dst.execute(
+            """
+            INSERT INTO biometric_profiles(pessoa_id,version,sample_count,source_reference,status)
+            SELECT p.id,1,COUNT(f.id),p.foto_path,CASE WHEN COUNT(f.id)>0 THEN 'ACTIVE' ELSE 'EMPTY' END
+            FROM pessoas p LEFT JOIN face_encodings f ON f.pessoa_id=p.id
+            GROUP BY p.id,p.foto_path
+            ON CONFLICT(pessoa_id) DO NOTHING
+            """
+        )
+
+        # A fonte pode estar em schema anterior; o destino sempre termina no schema atual.
         dst.execute(
             "INSERT INTO schema_meta(chave,valor) VALUES('schema_version',?) "
             "ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor",
@@ -228,7 +245,7 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
         dst.execute(
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO UPDATE SET detalhes=EXCLUDED.detalhes",
-            ("sqlite-to-postgresql-v6.11", str(source_path), detalhe),
+            ("sqlite-to-postgresql-v6.12", str(source_path), detalhe),
         )
         database._sincronizar_sequences_postgresql(dst)
         dst.commit()

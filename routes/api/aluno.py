@@ -1,8 +1,9 @@
 """Recursos do aluno expostos para o aplicativo mobile."""
 
-from flask import Blueprint, g, jsonify, url_for
+from flask import Blueprint, g, jsonify
 
 import database
+from services import storage_service
 from .common import aluno_token_obrigatorio, resposta_erro
 
 
@@ -32,7 +33,7 @@ def me():
             "data_inicio": pessoa.get("data_inicio"),
             "data_vencimento": pessoa.get("data_vencimento"),
             "status_financeiro": pessoa.get("status_financeiro"),
-            "foto_url": url_for("static", filename=pessoa["foto_path"]) if pessoa.get("foto_path") else None,
+            "foto_url": storage_service.url_temporaria(pessoa.get("foto_path")) if pessoa.get("foto_path") else None,
         },
         "conta": {
             "login": g.aluno_acesso.get("login"),

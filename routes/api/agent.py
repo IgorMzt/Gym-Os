@@ -1,4 +1,4 @@
-"""API autenticada entre Gym OS Cloud e agentes locais V6.11."""
+"""API autenticada entre Gym OS Cloud e agentes locais V6.12."""
 
 from __future__ import annotations
 

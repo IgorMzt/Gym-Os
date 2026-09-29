@@ -1,7 +1,7 @@
 """Aplicacao Flask do Gym OS.
 
-V6.11: backend cloud + agente local autenticado, com fila offline, comandos e
-cache de acesso, mantendo SQLite/PostgreSQL compativeis.
+V6.12: storage privado + biometria versionada sincronizada com o agente local,
+mantendo SQLite/PostgreSQL e arquivos legados compativeis.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from core.logging_config import configure_logging
 from core.settings import Settings
 from routes.aluno_app import aluno_app_bp
 from routes.agentes import agentes_bp
+from routes.media import media_bp
 from routes.auth import auth_bp
 from routes.avaliacoes import avaliacoes_bp
 from routes.dashboard import dashboard_bp
@@ -47,7 +48,7 @@ from routes.api import (
     api_notificacoes_bp,
     api_treinos_bp,
 )
-from services import auth_service
+from services import auth_service, storage_service
 
 
 def formatar_moeda_centavos(valor):
@@ -120,6 +121,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             "papeis_usuario": auth_service.ROTULOS_PAPEL,
             "gym_version": settings.app_version,
             "gym_environment": settings.environment,
+            "media_url": storage_service.url_temporaria,
         }
 
     @app.before_request
@@ -174,8 +176,9 @@ def create_app(settings: Settings | None = None) -> Flask:
     def data_br_filter(valor):
         return formatar_data_br(valor)
 
-    # System primeiro: health checks nao dependem das paginas do painel.
+    # System/media primeiro: health checks e entrega assinada nao dependem do painel.
     app.register_blueprint(system_bp)
+    app.register_blueprint(media_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(professores_bp)

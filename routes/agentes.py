@@ -42,7 +42,7 @@ def api_criar_comando(agent_id):
         return jsonify({"sucesso": False, "erro": "Agente nao encontrado."}), 404
     dados = request.get_json(silent=True) or {}
     tipo = str(dados.get("tipo") or "").strip().upper()
-    permitidos = {"PING", "SYNC_ACCESS", "REFRESH_CONFIG", "TEST_TURNSTILE"}
+    permitidos = {"PING", "SYNC_ACCESS", "SYNC_BIOMETRICS", "REFRESH_CONFIG", "TEST_TURNSTILE"}
     if tipo not in permitidos:
         return jsonify({"sucesso": False, "erro": "Comando invalido."}), 400
     comando = database.criar_comando_agente(agent_id, tipo, dados.get("payload") or {})

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 import database
+from services import storage_service
 
 
 def _config_int(chave: str, padrao: int, minimo: int, maximo: int) -> int:
@@ -25,15 +26,7 @@ def _status_financeiro(pessoa: dict) -> str:
 
 
 def _foto_web(path):
-    if not path:
-        return None
-    valor = str(path).replace("\\", "/")
-    marcador = "static/"
-    if marcador in valor:
-        return "/" + valor.split(marcador, 1)[1].join(["static/", ""]) if False else "/" + marcador + valor.split(marcador, 1)[1]
-    if valor.startswith("/static/"):
-        return valor
-    return None
+    return storage_service.url_temporaria(path) if path else None
 
 
 def _alertas(pessoas: list[dict], dias_alerta: int) -> list[dict]:

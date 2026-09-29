@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, storage_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -92,7 +92,7 @@ def _salvar_fotos_avaliacao(payload, atual=None):
             resultado[campo] = None
         if payload.get(chave):
             _, binario = decodificar_imagem(payload[chave])
-            nova = salvar_foto(binario)
+            nova = salvar_foto(binario, "avaliacoes")
             novas.append(nova)
             if resultado.get(campo):
                 antigas_remover.append(resultado[campo])
@@ -117,6 +117,8 @@ def api_criar_avaliacao(pessoa_id):
         fotos,novas,_=_salvar_fotos_avaliacao(payload)
         dados=assessment_service.normalizar(payload,pessoa_id,professor_id,fotos)
         avaliacao_id=database.criar_avaliacao_fisica(dados,int(session.get("usuario_id")))
+        for ref in novas:
+            storage_service.vincular_upload(ref, owner_type="avaliacao_fisica", owner_id=avaliacao_id, categoria="avaliacoes")
         database.registrar_log_admin("AVALIACAO_FISICA_CRIADA",str(avaliacao_id),f"aluno:{pessoa_id}",_ip_cliente())
         return jsonify({"sucesso":True,"id":avaliacao_id})
     except ValueError as exc:
@@ -136,6 +138,9 @@ def api_avaliacao_detalhe(avaliacao_id):
     if not professor_pode_gerir_aluno(atual["pessoa_id"]):
         return jsonify({"sucesso":False,"erro":"Sem permissão."}),403
     if request.method=="GET":
+        atual = dict(atual)
+        for campo in ("foto_frontal_path", "foto_lateral_path", "foto_costas_path"):
+            atual[campo.replace("_path", "_url")] = storage_service.url_temporaria(atual.get(campo)) if atual.get(campo) else None
         return jsonify({"sucesso":True,"avaliacao":atual})
     payload=request.get_json(silent=True) or {}
     novas=[]
@@ -143,6 +148,8 @@ def api_avaliacao_detalhe(avaliacao_id):
         fotos,novas,antigas=_salvar_fotos_avaliacao(payload,atual)
         dados=assessment_service.normalizar(payload,atual["pessoa_id"],atual.get("professor_id"),fotos)
         database.atualizar_avaliacao_fisica(avaliacao_id,dados)
+        for ref in novas:
+            storage_service.vincular_upload(ref, owner_type="avaliacao_fisica", owner_id=avaliacao_id, categoria="avaliacoes")
         for p in antigas:
             if p not in novas: limpar_foto(p)
         database.registrar_log_admin("AVALIACAO_FISICA_ATUALIZADA",str(avaliacao_id),f"aluno:{atual['pessoa_id']}",_ip_cliente())

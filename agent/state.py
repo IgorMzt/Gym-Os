@@ -45,6 +45,7 @@ class AgentState:
                     data_vencimento TEXT,
                     status_financeiro TEXT,
                     liberado INTEGER NOT NULL DEFAULT 0,
+                    biometric_version INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS access_face_encodings (
@@ -81,6 +82,9 @@ class AgentState:
                 );
                 """
             )
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(access_people)").fetchall()}
+            if "biometric_version" not in cols:
+                conn.execute("ALTER TABLE access_people ADD COLUMN biometric_version INTEGER NOT NULL DEFAULT 0")
             conn.commit()
         finally:
             conn.close()
@@ -120,14 +124,14 @@ class AgentState:
                     """
                     INSERT INTO access_people(
                         pessoa_id,nome,cpf,matricula,plano,plano_id,data_vencimento,
-                        status_financeiro,liberado,updated_at
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?)
+                        status_financeiro,liberado,biometric_version,updated_at
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         int(pessoa["id"]), str(pessoa.get("nome") or "Aluno"), pessoa.get("cpf"),
                         pessoa.get("matricula"), pessoa.get("plano"), pessoa.get("plano_id"),
                         pessoa.get("data_vencimento"), pessoa.get("status_financeiro"),
-                        1 if pessoa.get("liberado") else 0, now,
+                        1 if pessoa.get("liberado") else 0, int(pessoa.get("biometric_version") or 0), now,
                     ),
                 )
                 for ordem, encoding in enumerate(pessoa.get("encodings") or [], 1):
@@ -147,6 +151,7 @@ class AgentState:
             metas = {
                 "last_access_sync_at": snapshot.get("generated_at") or now,
                 "sync_version": snapshot.get("sync_version") or "",
+                "biometric_sync_version": snapshot.get("biometric_sync_version") or snapshot.get("sync_version") or "",
                 "access_config": json.dumps(config, ensure_ascii=False, separators=(",", ":")),
             }
             for k, v in metas.items():

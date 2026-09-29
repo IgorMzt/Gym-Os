@@ -117,7 +117,7 @@ def decodificar_imagem(data_url):
     return cv2.cvtColor(imagem_bgr, cv2.COLOR_BGR2RGB), dados_binarios
 
 
-def salvar_foto(dados_binarios):
+def salvar_foto(dados_binarios, categoria="fotos"):
     array = np.frombuffer(dados_binarios, dtype=np.uint8)
     imagem = cv2.imdecode(array, cv2.IMREAD_COLOR)
     if imagem is None:
@@ -125,7 +125,7 @@ def salvar_foto(dados_binarios):
     ok, encoded = cv2.imencode(".jpg", imagem, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
     if not ok:
         raise ValueError("Nao foi possivel salvar a foto.")
-    return storage_service.salvar_upload(encoded.tobytes(), ".jpg")
+    return storage_service.salvar_upload(encoded.tobytes(), ".jpg", categoria=categoria, content_type="image/jpeg")
 
 
 def limpar_foto(foto_path):
@@ -151,7 +151,7 @@ def resposta_pessoa(pessoa, status, motivo):
         "valor_plano": None,
         "data_vencimento": pessoa.get("data_vencimento") or "-",
         "status_financeiro": financeiro,
-        "foto": url_for("static", filename=pessoa["foto_path"]) if pessoa.get("foto_path") else None,
+        "foto": storage_service.url_temporaria(pessoa.get("foto_path")) if pessoa.get("foto_path") else None,
         "status": status,
         "motivo": motivo,
     }

@@ -428,6 +428,40 @@ POSTGRES_SCHEMA_STATEMENTS = [
     )
     """,
     f"""
+    CREATE TABLE IF NOT EXISTS storage_objects (
+        id BIGSERIAL PRIMARY KEY,
+        referencia TEXT NOT NULL UNIQUE,
+        object_key TEXT NOT NULL UNIQUE,
+        backend TEXT NOT NULL,
+        bucket TEXT,
+        categoria TEXT NOT NULL DEFAULT 'geral',
+        content_type TEXT,
+        size_bytes BIGINT NOT NULL DEFAULT 0,
+        sha256 TEXT,
+        owner_type TEXT,
+        owner_id BIGINT,
+        retention_until TEXT,
+        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','DELETED')),
+        created_at TEXT {TS_DEFAULT},
+        updated_at TEXT {TS_DEFAULT},
+        deleted_at TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_storage_owner ON storage_objects(owner_type,owner_id,status)",
+    "CREATE INDEX IF NOT EXISTS idx_storage_retention ON storage_objects(status,retention_until)",
+    f"""
+    CREATE TABLE IF NOT EXISTS biometric_profiles (
+        pessoa_id BIGINT PRIMARY KEY REFERENCES pessoas(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL DEFAULT 1,
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        source_reference TEXT,
+        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','EMPTY','DELETED')),
+        retention_until TEXT,
+        updated_at TEXT {TS_DEFAULT},
+        deleted_at TEXT
+    )
+    """,
+    f"""
     CREATE TABLE IF NOT EXISTS database_migrations (
         id BIGSERIAL PRIMARY KEY,
         migration_key TEXT NOT NULL UNIQUE,
@@ -447,6 +481,13 @@ POSTGRES_SCHEMA_STATEMENTS = [
     "ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS vencimento_apos TEXT",
     "ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS ultimo_evento TEXT",
     "ALTER TABLE cobrancas ADD COLUMN IF NOT EXISTS data_atualizacao TEXT",
+    """
+    INSERT INTO biometric_profiles(pessoa_id,version,sample_count,source_reference,status)
+    SELECT p.id,1,COUNT(f.id),p.foto_path,CASE WHEN COUNT(f.id)>0 THEN 'ACTIVE' ELSE 'EMPTY' END
+    FROM pessoas p LEFT JOIN face_encodings f ON f.pessoa_id=p.id
+    GROUP BY p.id,p.foto_path
+    ON CONFLICT(pessoa_id) DO NOTHING
+    """,
     # Indices historicos.
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_pessoas_cpf ON pessoas(cpf) WHERE cpf IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_pessoas_matricula ON pessoas(matricula) WHERE matricula IS NOT NULL",

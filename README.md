@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.11 adiciona o agente local da academia**, conectado ao backend PostgreSQL/cloud com heartbeat, cache offline, fila de eventos e comandos.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.12 adiciona storage privado e versionamento biométrico**, mantendo o Agent local capaz de reconhecer alunos offline com cache mínimo de encodings.
 
 ## Visão geral
 
@@ -29,10 +29,11 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 | Camada | Tecnologia |
 | --- | --- |
 | Backend | Python 3.11 + Flask |
-| Banco | SQLite ou PostgreSQL (V6.10) |
+| Banco | SQLite ou PostgreSQL (schema 22) |
 | Visão computacional | OpenCV + face_recognition + dlib |
 | Frontend | HTML, CSS e JavaScript vanilla |
 | PWA | Web App Manifest + Service Worker |
+| Storage | Privado local ou object storage S3/MinIO compatível |
 | Pagamentos | Asaas API / PIX |
 | Relatórios | ReportLab |
 
@@ -62,11 +63,13 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 │   └── payments/
 │       └── asaas_gateway.py
 ├── templates/                 # Templates Jinja2
+├── storage/
+│   └── private/              # Arquivos privados locais; não versionados
 ├── static/
 │   ├── assets/                # Identidade visual
 │   ├── css/
 │   ├── js/
-│   ├── uploads/               # Dados de runtime; não versionados
+│   ├── uploads/               # Compatibilidade legada; não versionados
 │   ├── manifest.webmanifest
 │   └── sw.js
 ├── tests/                     # Testes automatizados do núcleo
@@ -108,7 +111,7 @@ python -c "import dlib, face_recognition, cv2, numpy; print('dlib:', dlib.__vers
 
 O projeto carrega automaticamente o arquivo `.env` da raiz usando `python-dotenv`. No pacote local há um `.env` pronto para edição e o Git o ignora; no repositório deve existir apenas o `.env.example`.
 
-A V6.11 mantém a separação por ambiente/papel e o backend dual da V6.10. Para desenvolvimento local, os valores principais são:
+A V6.12 mantém a separação por ambiente/papel e o backend dual da V6.10, adicionando storage privado. Para desenvolvimento local, os valores principais são:
 
 ```env
 APP_ENV=development
@@ -130,7 +133,7 @@ O `.env.example` documenta também proxy seguro, logging, pool PostgreSQL, `DATA
 Copy-Item .env.example .env
 ```
 
-> **Importante:** `.env`, `perfis.db`, `static/uploads/` e backups são dados locais e não devem ser commitados. O `.gitignore` já protege esses caminhos, mas sempre confira `git status` antes do primeiro push.
+> **Importante:** `.env`, `perfis.db`, `static/uploads/`, `storage/private/` e backups são dados locais e não devem ser commitados. O `.gitignore` já protege esses caminhos, mas sempre confira `git status` antes do primeiro push.
 
 ## Executando
 
@@ -188,7 +191,7 @@ python manage.py migrate-sqlite --source perfis.db
 python manage.py db-status
 ```
 
-O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 21, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
+O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 22, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
 
 Para testar um PostgreSQL já configurado também existe:
 
@@ -218,9 +221,42 @@ GET /health/ready  # banco, storage e bloqueios arquiteturais
 GET /health        # compatibilidade com o health check anterior
 ```
 
-A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` continua intencional até a V6.12, quando uploads/biometria serão movidos para storage apropriado.
+A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` desaparece quando o papel cloud usa `STORAGE_BACKEND=object` com bucket privado configurado.
 
-## Agente local — V6.11
+## Storage e biometria — V6.12
+
+Novos uploads usam referências privadas (`private://` no ambiente local ou `object://` em S3/MinIO). As telas não montam mais URLs públicas diretamente para esses arquivos: o backend entrega links temporários, e caminhos antigos em `static/uploads` continuam compatíveis durante a migração.
+
+Configuração cloud típica:
+
+```env
+APP_ROLE=cloud
+DATABASE_BACKEND=postgresql
+DATABASE_URL=postgresql://...
+STORAGE_BACKEND=object
+STORAGE_BUCKET=gym-os-private
+STORAGE_REGION=sa-east-1
+STORAGE_ENDPOINT_URL=
+STORAGE_PREFIX=gym-os
+STORAGE_SIGNED_URL_TTL=300
+STORAGE_SSE=AES256
+```
+
+Validação e retenção:
+
+```powershell
+python manage.py storage-status
+python manage.py storage-migrate-legacy --dry-run
+python manage.py storage-migrate-legacy
+python manage.py storage-purge --dry-run
+python manage.py storage-purge
+```
+
+Depois da atualização de um banco com dados reais, `storage-migrate-legacy --dry-run` lista fotos ainda expostas em `static/uploads`; sem `--dry-run`, copia o conteúdo para o backend privado configurado, atualiza as referências e remove o arquivo público antigo.
+
+O PostgreSQL guarda metadados e referências; o conteúdo fica no storage. Para backup em produção, combine `pg_dump`/snapshot do banco com versionamento/snapshot/replicação do bucket conforme o provedor.
+
+## Agente local — V6.12
 
 O diretório `agent/` agora implementa o processo local da academia. O segredo `AGENT_API_TOKEN` serve apenas para o **registro/bootstrap**; o backend emite um token individual por máquina e persiste somente seu hash.
 
@@ -237,7 +273,7 @@ python manage.py agent-status
 
 O agente mantém um `agent_state.db` local (ignorado pelo Git) com cache de acesso e outbox. Se a internet cair, decisões podem usar o cache por uma janela limitada; quando o cache expira, o acesso **falha fechado**. Eventos offline são enviados de forma idempotente quando a conexão retorna.
 
-O painel **Sistema → Agentes locais** mostra heartbeat, fila, idade do cache e permite enfileirar `PING`, sincronização e teste de catraca. O modo `SIMULADA` funciona sem hardware; adaptadores HTTP/SERIAL/HARDWARE ainda precisam ser implementados conforme o modelo físico da catraca utilizada.
+O painel **Sistema → Agentes locais** mostra heartbeat, fila, idade do cache e permite enfileirar `PING`, sincronização e teste de catraca. A V6.12 inclui `SYNC_BIOMETRICS`; o snapshot leva encodings e versões biométricas, mas não fotos privadas. O modo `SIMULADA` funciona sem hardware; adaptadores HTTP/SERIAL/HARDWARE ainda precisam ser implementados conforme o modelo físico da catraca utilizada.
 
 Para um futuro servidor Linux/cloud, existe `wsgi.py` e `requirements-prod.txt`. O servidor de desenvolvimento `python app.py` continua sendo o fluxo local.
 
@@ -289,7 +325,8 @@ No SQLite, as verificações usam `PRAGMA quick_check`/`foreign_key_check`; no P
 Este sistema pode tratar **dados pessoais e biométricos**, incluindo CPF, fotos e encodings faciais. Por isso:
 
 - `perfis.db` não é versionado;
-- `static/uploads/` não é versionado;
+- novos arquivos privados ficam em `storage/private/` no modo local ou em bucket privado no modo object;
+- `static/uploads/` permanece apenas como compatibilidade legada e não é versionado;
 - `.env` não é versionado;
 - backups devem ser armazenados fora do repositório e protegidos;
 - produção deve utilizar HTTPS, credenciais fortes e política adequada de acesso/retenção;
@@ -299,7 +336,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V6.11 separa a comunicação do agente local e mantém reconhecimento/acionamento no PC da academia. Ainda **não é a release de produção completa**: uploads/biometria serão endurecidos na V6.12, multiacademia entra na V6.13 e adaptadores de catraca física dependem do equipamento escolhido.
+A V6.12 separa metadados do conteúdo privado, adiciona URLs temporárias, retenção/exclusão e versionamento biométrico para sincronização do Agent. Ainda **não é a release de produção completa**: multiacademia entra na V6.13, administração SaaS na V6.14 e o hardening final permanece para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -310,8 +347,8 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 - V6.1–V6.8: modularização, API mobile, app Expo, treinos, histórico, evolução, financeiro, push e experiência mobile;
 - V6.9: preparação de produção/cloud;
 - V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL;
-- **V6.11: agente local, cache offline, fila e comandos cloud ↔ academia**;
-- V6.12: storage cloud + tratamento de biometria;
+- V6.11: agente local, cache offline, fila e comandos cloud ↔ academia;
+- **V6.12: storage privado/cloud, URLs assinadas, retenção e versionamento/sincronização biométrica**;
 - V6.13: multiacademia/multiunidade;
 - V6.14: administração SaaS;
 - V6.15: comunicação;

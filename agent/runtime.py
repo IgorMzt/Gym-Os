@@ -1,4 +1,4 @@
-"""Orquestrador de sincronizacao, fila offline e comandos do agente V6.11."""
+"""Orquestrador de sincronizacao, fila offline e comandos do agente V6.12."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ def metadata(state: AgentState) -> dict:
         "machine_id": machine_id(),
         "hostname": socket.gethostname()[:160],
         "plataforma": platform.platform()[:80],
-        "app_version": "6.11",
-        "capabilities": {"face_recognition": True, "turnstile": True, "offline_queue": True},
+        "app_version": "6.12",
+        "capabilities": {"face_recognition": True, "biometric_cache": True, "turnstile": True, "offline_queue": True},
         "queue_depth": state.queue_depth(),
         "cache_age_seconds": state.cache_age_seconds(),
     }
@@ -97,7 +97,7 @@ class AgentRuntime:
         payload = command.get("payload") or {}
         if tipo == "PING":
             return True, {"pong": True, "time": time.time()}
-        if tipo in {"SYNC_ACCESS", "REFRESH_CONFIG"}:
+        if tipo in {"SYNC_ACCESS", "SYNC_BIOMETRICS", "REFRESH_CONFIG"}:
             return True, self.sync_access()
         if tipo == "TEST_TURNSTILE":
             catraca_id = payload.get("catraca_id")

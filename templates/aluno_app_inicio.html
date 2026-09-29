@@ -1,5 +1,5 @@
 {% extends "aluno_app_base.html" %}{% block titulo %}Início · Panobianco{% endblock %}{% block conteudo %}
-<section class="student-hello-v58 student-hello-v591"><div><small>OLÁ, {{ pessoa.nome.split(' ')[0]|upper }}</small><h1>Pronto para evoluir?</h1><p>{{ pessoa.plano or 'Plano não informado' }} · {{ pessoa.status_operacional|replace('_',' ')|title }}</p></div>{% if pessoa.foto_path %}<img src="{{ url_for('static',filename=pessoa.foto_path) }}" alt="">{% endif %}</section>
+<section class="student-hello-v58 student-hello-v591"><div><small>OLÁ, {{ pessoa.nome.split(' ')[0]|upper }}</small><h1>Pronto para evoluir?</h1><p>{{ pessoa.plano or 'Plano não informado' }} · {{ pessoa.status_operacional|replace('_',' ')|title }}</p></div>{% if pessoa.foto_path %}<img src="{{ media_url(pessoa.foto_path) }}" alt="">{% endif %}</section>
 {% if sessao %}
 <a href="{{ url_for('aluno_app.aluno_app_execucao',sessao_id=sessao.id) }}" class="student-resume-v58"><div><small>TREINO EM ANDAMENTO</small><strong>{{ sessao.treino_nome }}</strong><span>{{ sessao.exercicios_concluidos }}/{{ sessao.total_exercicios }} exercícios</span></div><b>Continuar →</b></a>
 {% elif proximo_treino %}

@@ -56,7 +56,7 @@ class MobileExperienceApiTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_21(self):
-        self.assertEqual(database.SCHEMA_VERSION, 21)
+        self.assertEqual(database.SCHEMA_VERSION, 22)
         conn = database.conectar()
         try:
             tabela = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='mobile_aluno_preferencias'").fetchone()

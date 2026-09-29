@@ -71,7 +71,7 @@
       $('#exercise-observacoes').value = e.observacoes || '';
       $('#exercise-ativo').checked = !!e.ativo;
       const p=$('#exercise-preview');
-      if (p) p.innerHTML = e.imagem_path ? `<img src="/static/${e.imagem_path}" alt="">` : '▦';
+      if (p) p.innerHTML = e.imagem_url ? `<img src="${e.imagem_url}" alt="">` : '▦';
       removerImagem = false;
       dialog?.showModal();
     } catch (err) {

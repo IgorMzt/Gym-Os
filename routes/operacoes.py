@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service, storage_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 from services.runtime_service import local_only
@@ -370,9 +370,10 @@ def api_cadastrar():
                 raise ValueError(f"Captura {indice}: apareceu mais de um rosto.")
             encodings.append(face_recognition.face_encodings(rgb, localizacoes)[0])
             primeiro_binario = primeiro_binario or binario
-        foto_path = salvar_foto(primeiro_binario)
+        foto_path = salvar_foto(primeiro_binario, "biometria")
         try:
             pessoa_id = database.adicionar_pessoa(cadastro, encodings, foto_path)
+            storage_service.vincular_upload(foto_path, owner_type="pessoa", owner_id=pessoa_id, categoria="biometria")
             face_index.invalidate()
         except Exception:
             limpar_foto(foto_path)
@@ -443,10 +444,11 @@ def api_biometria(pessoa_id):
                 raise ValueError(f"Captura {indice}: mantenha somente um rosto no quadro.")
             encodings.append(face_recognition.face_encodings(rgb, localizacoes)[0])
             primeiro_binario = primeiro_binario or binario
-        foto_nova = salvar_foto(primeiro_binario)
+        foto_nova = salvar_foto(primeiro_binario, "biometria")
         foto_antiga = pessoa.get("foto_path")
         try:
             database.atualizar_amostras_e_foto(pessoa_id, encodings, foto_nova)
+            storage_service.vincular_upload(foto_nova, owner_type="pessoa", owner_id=pessoa_id, categoria="biometria")
             face_index.invalidate()
         except Exception:
             limpar_foto(foto_nova)

@@ -1,5 +1,23 @@
 # Changelog
 
+## V6.12 — Storage privado + biometria
+
+- Schema atualizado para **22** com `storage_objects` e `biometric_profiles`.
+- Novos uploads deixam de ser públicos em `static/uploads`: no desenvolvimento/piloto são gravados em `storage/private`; em cloud usam object storage S3/MinIO compatível.
+- Referências persistidas usam `private://` ou `object://`; caminhos legados continuam compatíveis durante a transição.
+- `python manage.py storage-migrate-legacy --dry-run` identifica fotos antigas em `static/uploads`; a execução sem `--dry-run` move os arquivos para o storage privado, atualiza o banco e remove a cópia pública.
+- Fotos de alunos, professores, exercícios e avaliações passam pela camada de storage e são exibidas por URL temporária/assinada.
+- Metadados de arquivo no PostgreSQL/SQLite incluem categoria, tipo MIME, tamanho, SHA-256, titular lógico, estado de exclusão e data opcional de retenção.
+- Exclusão física atualiza o metadado para `DELETED`; `python manage.py storage-purge --dry-run` permite revisar retenções vencidas antes da remoção.
+- `python manage.py storage-status` valida o backend de storage e mostra objetos ativos/excluídos.
+- Biometria passa a ter versão e quantidade de amostras por aluno; alterações incrementam `biometric_version`.
+- Snapshot Cloud → Agent transporta somente encodings necessários e versão biométrica, sem depender da foto para reconhecer o aluno offline.
+- Cache SQLite do Agent armazena `biometric_version` e `biometric_sync_version`; novo comando `SYNC_BIOMETRICS` força sincronização controlada.
+- Object storage suporta endpoint customizado, região, SSE e URLs pré-assinadas; `boto3` adicionado às dependências.
+- Migração SQLite → PostgreSQL inclui as novas tabelas e realinha a sequence de `storage_objects`.
+- Preparação LGPD: storage privado por padrão, cache biométrico mínimo no Agent, trilha de metadados, retenção e exclusão.
+- **8 novos testes** de schema, storage local/object, migração legada, retenção, versionamento biométrico e sincronização do Agent, levando o repositório a **59 testes**.
+
 ## V6.11 — Agente local da academia
 
 - Schema atualizado para **21** com `agentes_locais`, `agente_comandos` e `agente_eventos`.

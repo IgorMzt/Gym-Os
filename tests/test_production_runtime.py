@@ -56,10 +56,14 @@ class ProductionRuntimeTests(unittest.TestCase):
             "STORAGE_LOCAL_DIR": tmp,
         }, clear=False):
             caminho = storage_service.salvar_upload(b"gym-os", ".bin")
-            self.assertTrue((Path(tmp) / Path(caminho).name).exists())
+            self.assertTrue(caminho.startswith("private://"))
+            url = storage_service.url_temporaria(caminho, 60)
+            token = url.rsplit("/", 1)[-1]
+            arquivo, _, _ = storage_service.resolver_token_local(token)
+            self.assertTrue(arquivo.exists())
             self.assertTrue(storage_service.healthcheck()["ok"])
             storage_service.remover_upload(caminho)
-            self.assertFalse((Path(tmp) / Path(caminho).name).exists())
+            self.assertFalse(arquivo.exists())
 
     def test_health_live_e_ready_local(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {

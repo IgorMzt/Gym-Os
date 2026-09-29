@@ -22,6 +22,8 @@ perfis.db
 backups/
 static/uploads/*
 !static/uploads/.gitkeep
+storage/private/*
+!storage/private/.gitkeep
 
 # Logs and generated files
 *.log
