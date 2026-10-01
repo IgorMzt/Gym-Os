@@ -53,17 +53,37 @@ class ProductionRuntimeTests(unittest.TestCase):
     def test_storage_local_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
             "STORAGE_BACKEND": "local",
-            "STORAGE_LOCAL_DIR": tmp,
+            "STORAGE_LOCAL_DIR": str(Path(tmp) / "uploads"),
         }, clear=False):
-            caminho = storage_service.salvar_upload(b"gym-os", ".bin")
-            self.assertTrue(caminho.startswith("private://"))
-            url = storage_service.url_temporaria(caminho, 60)
-            token = url.rsplit("/", 1)[-1]
-            arquivo, _, _ = storage_service.resolver_token_local(token)
-            self.assertTrue(arquivo.exists())
-            self.assertTrue(storage_service.healthcheck()["ok"])
-            storage_service.remover_upload(caminho)
-            self.assertFalse(arquivo.exists())
+            original = database.DB_PATH
+            original_backend = database.DATABASE_BACKEND
+
+            database.DATABASE_BACKEND = "sqlite"
+            database.DB_PATH = Path(tmp) / "storage-runtime.db"
+
+            try:
+                # V6.12+: storage privado também persiste metadata no banco.
+                database.criar_tabelas()
+
+                caminho = storage_service.salvar_upload(b"gym-os", ".bin")
+
+                self.assertTrue(caminho.startswith("private://"))
+
+                url = storage_service.url_temporaria(caminho, 60)
+                token = url.rsplit("/", 1)[-1]
+
+                arquivo, _, _ = storage_service.resolver_token_local(token)
+
+                self.assertTrue(arquivo.exists())
+                self.assertTrue(storage_service.healthcheck()["ok"])
+
+                storage_service.remover_upload(caminho)
+
+                self.assertFalse(arquivo.exists())
+
+            finally:
+                database.DB_PATH = original
+                database.DATABASE_BACKEND = original_backend
 
     def test_health_live_e_ready_local(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {

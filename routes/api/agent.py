@@ -1,4 +1,4 @@
-"""API autenticada entre Gym OS Cloud e agentes locais V6.12."""
+"""API autenticada entre Gym OS Cloud e agentes locais V6.13."""
 
 from __future__ import annotations
 
@@ -33,6 +33,7 @@ def agente_token_obrigatorio(func):
         if not agente:
             return jsonify({"sucesso": False, "codigo": "AGENT_NAO_AUTORIZADO"}), 401
         g.gym_agent = agente
+        database.set_tenant_context(agente.get("academia_id") or 1, agente.get("unidade_id") or 1)
         return func(*args, **kwargs)
     return wrapper
 
@@ -54,7 +55,7 @@ def register():
     except ValueError as exc:
         return jsonify({"sucesso": False, "codigo": "AGENT_REGISTRO_INVALIDO", "erro": str(exc)}), 400
     database.registrar_log_admin("AGENT_REGISTRADO", agente.get("agent_uid"), agente.get("hostname"), _ip_cliente())
-    publico = {k: agente.get(k) for k in ("id", "agent_uid", "nome", "hostname", "machine_id", "app_version")}
+    publico = {k: agente.get(k) for k in ("id", "agent_uid", "nome", "hostname", "machine_id", "app_version", "academia_id", "unidade_id")}
     return jsonify({"sucesso": True, "agent": publico, "agent_token": token}), 201
 
 
@@ -76,7 +77,7 @@ def heartbeat():
 @api_agent_bp.get("/sync/access")
 @agente_token_obrigatorio
 def sync_access():
-    return jsonify({"sucesso": True, "snapshot": agent_service.access_snapshot()})
+    return jsonify({"sucesso": True, "snapshot": agent_service.access_snapshot(g.gym_agent)})
 
 
 @api_agent_bp.post("/access/check")
@@ -87,7 +88,7 @@ def access_check():
         pessoa_id = int(dados.get("pessoa_id"))
     except (TypeError, ValueError):
         return jsonify({"sucesso": False, "codigo": "PESSOA_INVALIDA"}), 400
-    decisao = agent_service.decisao_acesso_online(pessoa_id)
+    decisao = agent_service.decisao_acesso_online(pessoa_id, g.gym_agent)
     return jsonify({"sucesso": True, **decisao})
 
 

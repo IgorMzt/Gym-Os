@@ -16,7 +16,7 @@ from typing import Any, Iterable
 
 
 IDENTITY_TABLES = {
-    "pessoas", "face_encodings", "logs_acesso", "planos", "usuarios",
+    "academias", "unidades", "pessoas", "face_encodings", "logs_acesso", "planos", "usuarios",
     "professores", "professor_alunos", "exercicios", "fichas_treino",
     "treinos", "treino_exercicios", "treino_sessoes", "treino_sessao_itens",
     "avaliacoes_fisicas", "aluno_acessos", "mobile_refresh_tokens",

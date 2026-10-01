@@ -67,10 +67,15 @@ def login():
     dados = _json()
     login_informado = str(dados.get("login") or dados.get("usuario") or "").strip()
     senha = str(dados.get("senha") or "")
+    academia_codigo = str(dados.get("academia") or "principal").strip().lower()
+    unidade_codigo = str(dados.get("unidade") or "principal").strip().lower()
+    tenant = database.resolver_tenant(academia_codigo, unidade_codigo)
+    if tenant:
+        database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
     if not login_informado or not senha:
         return resposta_erro("Informe login e senha.", 400, "CAMPOS_OBRIGATORIOS")
 
-    usuario = auth_service.autenticar_aluno(login_informado, senha)
+    usuario = auth_service.autenticar_aluno(login_informado, senha) if tenant else None
     if not usuario:
         _registrar_falha(ip)
         database.registrar_log_admin("API_LOGIN_FALHOU", login_informado or "-", "Credenciais invalidas.", ip)
@@ -87,6 +92,8 @@ def login():
             "nome": usuario["nome"],
             "login": usuario["login"],
             "matricula": usuario.get("matricula"),
+            "academia": tenant["academia"]["slug"],
+            "unidade": tenant["unidade"]["codigo"],
         },
     })
 

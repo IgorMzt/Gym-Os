@@ -69,3 +69,11 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Na V6.12, novos arquivos são privados por padrão e chegam ao navegador somente por URL temporária/assinada; o Agent recebe encodings mínimos, não fotos, para reconhecimento offline.
 - Use `storage-purge --dry-run` antes de aplicar retenções vencidas e defina políticas de retenção compatíveis com a finalidade/legalidade do tratamento.
 - Em object storage, mantenha o bucket privado, bloqueie acesso público, habilite criptografia/versionamento conforme o provedor e restrinja as credenciais ao menor conjunto de permissões necessário.
+
+## Isolamento multiacademia — V6.13
+
+- Toda requisição autenticada deve operar no contexto de uma academia/unidade; não confie em IDs de recurso enviados pelo cliente sem validar o tenant.
+- Tokens mobile carregam `academia_id` e `unidade_id`; o refresh recupera o tenant a partir do vínculo persistido, evitando cair no tenant padrão.
+- Agents são vinculados a uma unidade no registro. Trocar um PC de unidade exige novo registro/configuração e revisão do token.
+- `AGENT_ACADEMIA` e `AGENT_UNIDADE` são identificadores operacionais, não segredos; o token individual do Agent continua sendo a credencial sensível.
+- Ao criar integrações, relatórios ou webhooks futuros, preserve o tenant derivado do recurso armazenado e não de parâmetros não confiáveis.

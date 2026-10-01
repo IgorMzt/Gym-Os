@@ -1,4 +1,4 @@
-# Gym OS Local Agent — V6.12
+# Gym OS Local Agent — V6.13
 
 O agente roda **na academia**. Camera, reconhecimento facial e acionamento da
 catraca permanecem locais; o backend cloud centraliza cadastro, regras, logs e
@@ -20,6 +20,8 @@ comandos.
 $env:AGENT_SERVER_URL="http://127.0.0.1:5000"
 $env:AGENT_API_TOKEN="mesmo-bootstrap-do-backend"
 $env:AGENT_UID="academia-principal-pc01"
+$env:AGENT_ACADEMIA="principal"
+$env:AGENT_UNIDADE="principal"
 python -m agent.main --once --sync
 python -m agent.main --diagnose
 ```

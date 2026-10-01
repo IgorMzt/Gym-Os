@@ -1,28 +1,33 @@
-"""Cache leve das configuracoes operacionais.
-
-Evita abrir uma conexao SQLite para cada parametro consultado durante uma leitura
-facial. O cache e invalidado sempre que as configuracoes sao alteradas pelo painel.
-"""
+"""Cache leve das configuracoes operacionais, isolado por academia/unidade."""
 from threading import RLock
 
 import database
 
 _lock = RLock()
-_cache = None
+_cache = {}
+
+
+def _tenant_key():
+    return (database.academia_atual_id(), database.unidade_atual_id())
 
 
 def _carregar():
-    global _cache
+    key = _tenant_key()
     with _lock:
-        if _cache is None:
-            _cache = database.obter_configuracoes()
-        return _cache
+        if key not in _cache:
+            _cache[key] = database.obter_configuracoes()
+        return _cache[key]
 
 
 def invalidate():
-    global _cache
+    key = _tenant_key()
     with _lock:
-        _cache = None
+        _cache.pop(key, None)
+
+
+def invalidate_all():
+    with _lock:
+        _cache.clear()
 
 
 def get(chave, padrao=None):

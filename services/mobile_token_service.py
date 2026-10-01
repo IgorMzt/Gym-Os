@@ -47,6 +47,8 @@ def emitir_access_token(usuario: dict) -> str:
         "papel": "ALUNO",
         "acesso_id": int(usuario["id"]),
         "pessoa_id": int(usuario["pessoa_id"]),
+        "academia_id": int(usuario.get("academia_id") or database.academia_atual_id()),
+        "unidade_id": int(usuario.get("unidade_id") or database.unidade_atual_id()),
         "jti": secrets.token_urlsafe(8),
     }
     return _serializer().dumps(payload)
@@ -67,6 +69,8 @@ def validar_access_token(token: str) -> dict:
     try:
         payload["acesso_id"] = int(payload["acesso_id"])
         payload["pessoa_id"] = int(payload["pessoa_id"])
+        payload["academia_id"] = int(payload.get("academia_id") or 1)
+        payload["unidade_id"] = int(payload.get("unidade_id") or 1)
     except (KeyError, TypeError, ValueError) as exc:
         raise TokenError("Token de acesso invalido.") from exc
     return payload
@@ -108,9 +112,12 @@ def rotacionar_refresh_token(refresh_token: str, ip: str | None = None, user_age
     if not sessao:
         raise TokenError("Refresh token invalido ou expirado.")
 
+    database.set_tenant_context(sessao["academia_id"], sessao["unidade_id"])
     usuario = {
         "id": sessao["aluno_acesso_id"],
         "pessoa_id": sessao["pessoa_id"],
+        "academia_id": sessao["academia_id"],
+        "unidade_id": sessao["unidade_id"],
     }
     return {
         "access_token": emitir_access_token(usuario),

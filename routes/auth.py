@@ -94,7 +94,12 @@ def pagina_login():
         else:
             login = (request.form.get("usuario") or "").strip()
             senha = request.form.get("senha") or ""
-            usuario = auth_service.autenticar(login, senha)
+            academia_codigo = (request.form.get("academia") or "principal").strip().lower()
+            unidade_codigo = (request.form.get("unidade") or "principal").strip().lower()
+            tenant = database.resolver_tenant(academia_codigo, unidade_codigo)
+            if tenant:
+                database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
+            usuario = auth_service.autenticar(login, senha) if tenant else None
             if usuario:
                 _login_tentativas.pop(ip, None)
                 session.clear()
@@ -104,6 +109,10 @@ def pagina_login():
                 session["usuario_nome"] = usuario["nome"]
                 session["usuario_login"] = usuario["login"]
                 session["usuario_papel"] = usuario["papel"]
+                session["academia_id"] = int(tenant["academia"]["id"])
+                session["academia_slug"] = tenant["academia"]["slug"]
+                session["unidade_id"] = int(tenant["unidade"]["id"])
+                session["unidade_codigo"] = tenant["unidade"]["codigo"]
                 if usuario["papel"] == "ALUNO":
                     session["aluno_id"] = usuario["pessoa_id"]
                 _garantir_csrf_token()
@@ -130,13 +139,18 @@ def primeiro_acesso():
         if _primeiro_acesso_bloqueado(ip):
             erro = "Muitas tentativas. Aguarde alguns minutos e tente novamente."
         else:
+            academia_codigo = (request.form.get("academia") or "principal").strip().lower()
+            unidade_codigo = (request.form.get("unidade") or "principal").strip().lower()
+            tenant = database.resolver_tenant(academia_codigo, unidade_codigo)
+            if tenant:
+                database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
             cpf = cpf_apenas_digitos(request.form.get("cpf") or "")
             matricula = (request.form.get("matricula") or "").strip().upper()
             nascimento = (request.form.get("data_nascimento") or "").strip()
             login = (request.form.get("login") or "").strip()
             senha = request.form.get("senha") or ""
             confirmar = request.form.get("confirmar_senha") or ""
-            pessoa = database.obter_pessoa_por_primeiro_acesso(cpf, matricula, nascimento)
+            pessoa = database.obter_pessoa_por_primeiro_acesso(cpf, matricula, nascimento) if tenant else None
             if not pessoa:
                 _registrar_falha_primeiro_acesso(ip)
                 erro = "Não foi possível validar os dados informados."

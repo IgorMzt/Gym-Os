@@ -1,4 +1,4 @@
-"""Executavel do Gym OS Local Agent V6.12."""
+"""Executavel do Gym OS Local Agent V6.13."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def main() -> None:
     if args.diagnose:
         print(json.dumps({
             "ok": True,
-            "version": "6.12",
+            "version": "6.13",
             "registered": bool(state.get_meta("agent_token")),
             "queue_depth": state.queue_depth(),
             "cache_age_seconds": state.cache_age_seconds(),
@@ -48,7 +48,7 @@ def main() -> None:
     sync_seconds = max(60, int(os.getenv("AGENT_SYNC_SECONDS") or "300"))
     backoff = 2
     last_sync = 0.0
-    print(f"Gym OS Agent 6.12 -> {runtime.server_url}")
+    print(f"Gym OS Agent 6.13 -> {runtime.server_url}")
     while True:
         now = time.monotonic()
         force_sync = args.sync or last_sync == 0.0 or now - last_sync >= sync_seconds

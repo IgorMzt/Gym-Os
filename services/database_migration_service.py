@@ -1,4 +1,4 @@
-"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.12)."""
+"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.13)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import database
 
 
 TABLE_ORDER = [
+    "academias",
+    "unidades",
     "planos",
     "configuracoes",
     "pessoas",
@@ -44,6 +46,8 @@ TABLE_ORDER = [
 ]
 
 PRIMARY_KEYS = {
+    "academias": ["id"],
+    "unidades": ["id"],
     "planos": ["id"],
     "configuracoes": ["chave"],
     "pessoas": ["id"],
@@ -222,6 +226,14 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
             dst.executemany(_upsert_sql(table, columns), values)
             copied[table] = len(values)
 
+        # Fontes anteriores a V6.13 nao possuem contexto de academia/unidade.
+        # Todo dado legado pertence a Academia Principal / Unidade Principal.
+        for table in ("pessoas","usuarios","professores","catracas","agentes_locais","logs_acesso","logs_admin","storage_objects"):
+            dst.execute(f"UPDATE {table} SET academia_id=1 WHERE academia_id IS NULL")
+            dst.execute(f"UPDATE {table} SET unidade_id=1 WHERE unidade_id IS NULL")
+        for table in ("planos","exercicios"):
+            dst.execute(f"UPDATE {table} SET academia_id=1 WHERE academia_id IS NULL")
+
         # Fontes V6.11 ou anteriores nao possuem biometric_profiles. Como o schema
         # do destino e criado antes da copia, o backfill inicial ainda nao encontra
         # pessoas. Refazemos o preenchimento depois que pessoas/encodings chegaram.
@@ -245,7 +257,7 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
         dst.execute(
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO UPDATE SET detalhes=EXCLUDED.detalhes",
-            ("sqlite-to-postgresql-v6.12", str(source_path), detalhe),
+            ("sqlite-to-postgresql-v6.13", str(source_path), detalhe),
         )
         database._sincronizar_sequences_postgresql(dst)
         dst.commit()

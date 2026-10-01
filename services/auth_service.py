@@ -41,6 +41,8 @@ def autenticar_aluno(login: str, senha: str):
         "papel": "ALUNO",
         "pessoa_id": acesso["pessoa_id"],
         "ativo": acesso["ativo"],
+        "academia_id": acesso.get("academia_id", database.academia_atual_id()),
+        "unidade_id": acesso.get("unidade_id", database.unidade_atual_id()),
     }
 
 

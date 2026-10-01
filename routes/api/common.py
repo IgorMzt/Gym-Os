@@ -33,6 +33,7 @@ def aluno_token_obrigatorio(func):
         except TokenError:
             return resposta_erro("Token de acesso invalido.", 401, "TOKEN_INVALIDO")
 
+        database.set_tenant_context(payload.get("academia_id") or 1, payload.get("unidade_id") or 1)
         acesso = database.obter_acesso_aluno_api(payload["acesso_id"], payload["pessoa_id"])
         if not acesso or not acesso.get("ativo"):
             return resposta_erro("Acesso do aluno indisponivel.", 401, "ACESSO_INATIVO")

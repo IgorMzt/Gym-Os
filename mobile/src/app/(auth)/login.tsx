@@ -12,6 +12,8 @@ const mark = require('../../../assets/images/panobianco-mark-laranja.png');
 
 export default function LoginScreen() {
   const { recarregarAluno } = useAuth();
+  const [academia, setAcademia] = useState('principal');
+  const [unidade, setUnidade] = useState('principal');
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
@@ -21,7 +23,7 @@ export default function LoginScreen() {
     if (!login.trim() || !senha) { setErro('Informe seu usuário ou CPF e sua senha.'); return; }
     setEnviando(true); setErro('');
     try {
-      await loginAluno(login.trim(), senha);
+      await loginAluno(login.trim(), senha, academia.trim() || 'principal', unidade.trim() || 'principal');
       const aluno = await recarregarAluno();
       if (!aluno) throw new Error('Não foi possível carregar os dados do aluno.');
       router.replace('/home' as Href);
@@ -46,6 +48,10 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.formCard}>
+            <Text style={styles.label}>Academia</Text>
+            <TextInput value={academia} onChangeText={setAcademia} autoCapitalize="none" autoCorrect={false} placeholder="Código da academia" placeholderTextColor="#9a9691" style={styles.input} />
+            <Text style={styles.label}>Unidade</Text>
+            <TextInput value={unidade} onChangeText={setUnidade} autoCapitalize="none" autoCorrect={false} placeholder="Código da unidade" placeholderTextColor="#9a9691" style={styles.input} />
             <Text style={styles.label}>Usuário ou CPF</Text>
             <TextInput value={login} onChangeText={setLogin} autoCapitalize="none" autoCorrect={false} placeholder="Digite seu usuário ou CPF" placeholderTextColor="#9a9691" style={styles.input} />
             <Text style={styles.label}>Senha</Text>

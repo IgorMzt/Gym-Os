@@ -139,9 +139,10 @@ def obter_dashboard() -> dict:
                    SUM(CASE WHEN status='BLOQUEADO' THEN 1 ELSE 0 END) bloqueados,
                    SUM(CASE WHEN status='NEGADO' THEN 1 ELSE 0 END) negados
             FROM logs_acesso
-            WHERE data_hora>=? AND data_hora<?
+            WHERE academia_id=? AND unidade_id=?
+              AND data_hora>=? AND data_hora<?
             """,
-            (inicio_dia, fim_dia),
+            (database.academia_atual_id(), database.unidade_atual_id(), inicio_dia, fim_dia),
         ).fetchone()
 
         entradas_hoje = int(resumo_logs["liberados"] or 0)
@@ -155,18 +156,20 @@ def obter_dashboard() -> dict:
                    p.plano, p.foto_path, l.id AS ultimo_id
             FROM logs_acesso l
             LEFT JOIN pessoas p ON p.id=l.pessoa_id
-            WHERE l.status='LIBERADO'
+            WHERE l.academia_id=? AND l.unidade_id=?
+              AND l.status='LIBERADO'
               AND l.pessoa_id IS NOT NULL
               AND l.data_hora >= ?
               AND l.id = (
                   SELECT MAX(l2.id) FROM logs_acesso l2
-                  WHERE l2.pessoa_id=l.pessoa_id AND l2.status='LIBERADO'
-                    AND l2.data_hora >= ?
+                  WHERE l2.pessoa_id=l.pessoa_id
+                    AND l2.academia_id=l.academia_id AND l2.unidade_id=l.unidade_id
+                    AND l2.status='LIBERADO' AND l2.data_hora >= ?
               )
             ORDER BY l.data_hora DESC
             LIMIT 12
             """,
-            (hora_limite, hora_limite),
+            (database.academia_atual_id(), database.unidade_atual_id(), hora_limite, hora_limite),
         ).fetchall()
 
         presenca = []
@@ -180,8 +183,10 @@ def obter_dashboard() -> dict:
                 """
                 SELECT id,pessoa_id,nome,status,motivo,data_hora,catraca_nome
                 FROM logs_acesso
+                WHERE academia_id=? AND unidade_id=?
                 ORDER BY id DESC LIMIT 12
-                """
+                """,
+                (database.academia_atual_id(), database.unidade_atual_id()),
             ).fetchall()
         ]
 
@@ -190,10 +195,11 @@ def obter_dashboard() -> dict:
             """
             SELECT CAST(SUBSTR(data_hora,12,2) AS INTEGER) hora, COUNT(*) qtd
             FROM logs_acesso
-            WHERE status='LIBERADO' AND data_hora>=? AND data_hora<?
+            WHERE academia_id=? AND unidade_id=?
+              AND status='LIBERADO' AND data_hora>=? AND data_hora<?
             GROUP BY hora
             """,
-            (inicio_dia, fim_dia),
+            (database.academia_atual_id(), database.unidade_atual_id(), inicio_dia, fim_dia),
         ).fetchall():
             horas[int(r["hora"])] = int(r["qtd"])
 
@@ -208,17 +214,21 @@ def obter_dashboard() -> dict:
         ultima_hora = int(conn.execute(
             """
             SELECT COUNT(*) FROM logs_acesso
-            WHERE status='LIBERADO' AND data_hora >= ?
+            WHERE academia_id=? AND unidade_id=?
+              AND status='LIBERADO' AND data_hora >= ?
             """,
-            (limite_ultima_hora,),
+            (database.academia_atual_id(), database.unidade_atual_id(), limite_ultima_hora),
         ).fetchone()[0] or 0)
 
         catracas = [dict(r) for r in conn.execute(
             """
             SELECT c.id,c.nome,c.local,c.modo,c.ativa,
-                   (SELECT MAX(l.data_hora) FROM logs_acesso l WHERE l.catraca_id=c.id) AS ultimo_evento
-            FROM catracas c ORDER BY c.id
-            """
+                   (SELECT MAX(l.data_hora) FROM logs_acesso l WHERE l.catraca_id=c.id AND l.academia_id=c.academia_id AND l.unidade_id=c.unidade_id) AS ultimo_evento
+            FROM catracas c
+            WHERE c.academia_id=? AND c.unidade_id=?
+            ORDER BY c.id
+            """,
+            (database.academia_atual_id(), database.unidade_atual_id()),
         ).fetchall()]
 
         inicio_mes = hoje.replace(day=1).isoformat()
@@ -234,17 +244,21 @@ def obter_dashboard() -> dict:
               COALESCE(SUM(CASE WHEN status IN ('PENDENTE','VENCIDO') THEN valor_centavos ELSE 0 END),0) a_receber,
               SUM(CASE WHEN status='VENCIDO' THEN 1 ELSE 0 END) cobrancas_vencidas,
               SUM(CASE WHEN status='PAGO' AND data_pagamento>=? AND data_pagamento<? THEN 1 ELSE 0 END) pagamentos_mes
-            FROM cobrancas
+            FROM cobrancas c
+            JOIN pessoas p ON p.id=c.pessoa_id
+            WHERE p.academia_id=? AND p.unidade_id=?
             """,
-            (inicio_dia, fim_dia, inicio_mes, fim_mes, inicio_mes, fim_mes),
+            (inicio_dia, fim_dia, inicio_mes, fim_mes, inicio_mes, fim_mes,
+             database.academia_atual_id(), database.unidade_atual_id()),
         ).fetchone()
         pagamentos_recentes = [dict(r) for r in conn.execute(
             """
             SELECT c.pessoa_id,p.nome,c.valor_centavos,c.data_pagamento,c.gateway_payment_id
-            FROM cobrancas c LEFT JOIN pessoas p ON p.id=c.pessoa_id
-            WHERE c.status='PAGO'
+            FROM cobrancas c JOIN pessoas p ON p.id=c.pessoa_id
+            WHERE p.academia_id=? AND p.unidade_id=? AND c.status='PAGO'
             ORDER BY COALESCE(c.data_pagamento,c.data_atualizacao,c.data_criacao) DESC LIMIT 6
-            """
+            """,
+            (database.academia_atual_id(), database.unidade_atual_id()),
         ).fetchall()]
         financeiro = {
             "receita_hoje_centavos": int(financeiro_row["receita_hoje"] or 0),

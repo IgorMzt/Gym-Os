@@ -7,6 +7,7 @@ import shutil
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
+from contextvars import ContextVar
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -18,8 +19,32 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 IntegrityError = database_backend.integrity_error_types()
+
+# V6.13 — contexto multiacademia. IDs 1/1 sao sempre a academia/unidade
+# principal criada durante a migracao, preservando compatibilidade com V6.12.
+_ACADEMIA_ATUAL = ContextVar("gym_academia_id", default=1)
+_UNIDADE_ATUAL = ContextVar("gym_unidade_id", default=1)
+
+
+def set_tenant_context(academia_id: int | None = None, unidade_id: int | None = None) -> None:
+    if academia_id is not None:
+        _ACADEMIA_ATUAL.set(max(1, int(academia_id)))
+    if unidade_id is not None:
+        _UNIDADE_ATUAL.set(max(1, int(unidade_id)))
+
+
+def academia_atual_id() -> int:
+    return int(_ACADEMIA_ATUAL.get() or 1)
+
+
+def unidade_atual_id() -> int:
+    return int(_UNIDADE_ATUAL.get() or 1)
+
+
+def tenant_context() -> dict:
+    return {"academia_id": academia_atual_id(), "unidade_id": unidade_atual_id()}
 
 
 def configure_runtime(settings) -> None:
@@ -219,6 +244,59 @@ def _migrar_tabela_pessoa_set_null(conn, tabela: str, create_sql: str, colunas_c
         conn.execute("PRAGMA foreign_keys = ON")
 
 
+
+def _migrar_planos_multiacademia(conn):
+    """Troca UNIQUE(nome) legado por UNIQUE(academia_id,nome) no SQLite."""
+    existe = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='planos'").fetchone()
+    if not existe:
+        return
+    info = {row[1]: row for row in conn.execute("PRAGMA table_info(planos)")}
+    sql_row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='planos'").fetchone()
+    create_sql = str(sql_row[0] or "") if sql_row else ""
+    # Se ja possui academia_id e nao possui UNIQUE global embutido, esta pronto.
+    if "academia_id" in info and "nome TEXT NOT NULL UNIQUE" not in create_sql:
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planos_academia_nome ON planos(academia_id,nome COLLATE NOCASE)")
+        return
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DROP TABLE IF EXISTS planos_v613")
+        conn.execute(
+            """
+            CREATE TABLE planos_v613 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                duracao_dias INTEGER NOT NULL,
+                descricao TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                data_cadastro TEXT DEFAULT CURRENT_TIMESTAMP,
+                academia_id INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        if "academia_id" in info:
+            conn.execute(
+                """INSERT INTO planos_v613(id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,academia_id)
+                   SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,COALESCE(academia_id,1) FROM planos"""
+            )
+        else:
+            conn.execute(
+                """INSERT INTO planos_v613(id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,academia_id)
+                   SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,1 FROM planos"""
+            )
+        conn.execute("DROP TABLE planos")
+        conn.execute("ALTER TABLE planos_v613 RENAME TO planos")
+        conn.execute("CREATE UNIQUE INDEX uq_planos_academia_nome ON planos(academia_id,nome COLLATE NOCASE)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def _migrar_historicos_para_pessoa_opcional(conn):
     _migrar_tabela_pessoa_set_null(
         conn,
@@ -310,10 +388,17 @@ def _criar_tabelas_postgresql():
             "ON CONFLICT(chave) DO UPDATE SET valor=EXCLUDED.valor",
             (str(SCHEMA_VERSION),),
         )
+        conn.execute("INSERT INTO academias(id,nome,slug,ativo) VALUES(1,'Academia Principal','principal',1) ON CONFLICT(id) DO NOTHING")
+        conn.execute("INSERT INTO unidades(id,academia_id,nome,codigo,ativo) VALUES(1,1,'Unidade Principal','principal',1) ON CONFLICT(id) DO NOTHING")
+        for tabela in ("pessoas","usuarios","professores","catracas","agentes_locais","logs_acesso","logs_admin","storage_objects"):
+            conn.execute(f"UPDATE {tabela} SET academia_id=1 WHERE academia_id IS NULL")
+            conn.execute(f"UPDATE {tabela} SET unidade_id=1 WHERE unidade_id IS NULL")
+        for tabela in ("planos","exercicios"):
+            conn.execute(f"UPDATE {tabela} SET academia_id=1 WHERE academia_id IS NULL")
         for nome, valor, dias, descricao in DEFAULT_PLANS:
             conn.execute(
-                "INSERT INTO planos (nome, valor_centavos, duracao_dias, descricao, ativo) VALUES (?, ?, ?, ?, 1) "
-                "ON CONFLICT(nome) DO NOTHING",
+                "INSERT INTO planos (nome, valor_centavos, duracao_dias, descricao, ativo, academia_id) VALUES (?, ?, ?, ?, 1, 1) "
+                "ON CONFLICT DO NOTHING",
                 (nome, valor, dias, descricao),
             )
         for chave, valor in DEFAULT_SETTINGS.items():
@@ -322,7 +407,7 @@ def _criar_tabelas_postgresql():
                 (chave, valor),
             )
         conn.execute(
-            "INSERT INTO catracas (id, nome, local, modo, ativa) VALUES (1, 'Catraca 01 - Entrada', 'Entrada principal', 'SIMULADA', 1) "
+            "INSERT INTO catracas (id, nome, local, modo, ativa, academia_id, unidade_id) VALUES (1, 'Catraca 01 - Entrada', 'Entrada principal', 'SIMULADA', 1, 1, 1) "
             "ON CONFLICT(id) DO NOTHING"
         )
         conn.execute(
@@ -339,6 +424,11 @@ def _criar_tabelas_postgresql():
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-22-storage-biometria", "V6.12", "Storage privado, metadados e biometria versionada."),
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-23-multiacademia", "V6.13", "Academias, unidades e isolamento tenant-aware."),
         )
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
@@ -358,6 +448,45 @@ def criar_tabelas():
         _migrar_historicos_para_pessoa_opcional(conn)
         # WAL melhora concorrencia entre leituras e gravacoes de varias catracas.
         conn.execute("PRAGMA journal_mode = WAL")
+
+        # V6.13 — raiz multiacademia. A academia/unidade 1 absorve todos os
+        # dados legados, de forma que a migracao nao altera o comportamento
+        # da instalacao atual.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS academias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                documento TEXT,
+                email TEXT,
+                telefone TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS unidades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                academia_id INTEGER NOT NULL,
+                nome TEXT NOT NULL,
+                codigo TEXT NOT NULL,
+                endereco TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (academia_id) REFERENCES academias(id) ON DELETE CASCADE,
+                UNIQUE(academia_id, codigo)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_unidades_academia_ativo ON unidades(academia_id,ativo)")
+        conn.execute("INSERT OR IGNORE INTO academias(id,nome,slug,ativo) VALUES(1,'Academia Principal','principal',1)")
+        conn.execute("INSERT OR IGNORE INTO unidades(id,academia_id,nome,codigo,ativo) VALUES(1,1,'Unidade Principal','principal',1)")
+        _migrar_planos_multiacademia(conn)
         # Repara referências históricas órfãs deixadas por exclusões de versões antigas.
         for tabela in ("logs_acesso", "cobrancas", "cobranca_eventos"):
             existe = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone()
@@ -440,15 +569,17 @@ def criar_tabelas():
             """
             CREATE TABLE IF NOT EXISTS planos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL UNIQUE,
+                nome TEXT NOT NULL,
                 valor_centavos INTEGER NOT NULL DEFAULT 0,
                 duracao_dias INTEGER NOT NULL,
                 descricao TEXT,
                 ativo INTEGER NOT NULL DEFAULT 1,
-                data_cadastro TEXT DEFAULT CURRENT_TIMESTAMP
+                data_cadastro TEXT DEFAULT CURRENT_TIMESTAMP,
+                academia_id INTEGER NOT NULL DEFAULT 1
             )
             """
         )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_planos_academia_nome ON planos(academia_id,nome COLLATE NOCASE)")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS configuracoes (
@@ -952,6 +1083,10 @@ def criar_tabelas():
             ("schema-22-storage-biometria", "V6.12", "Storage privado, metadados e biometria versionada."),
         )
         conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-23-multiacademia", "V6.13", "Academias, unidades e isolamento tenant-aware."),
+        )
+        conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cobrancas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1090,10 +1225,44 @@ def criar_tabelas():
             """
         )
 
+        # V6.13 — tenantiza as entidades raiz sem recriar as tabelas legadas.
+        for tabela, colunas_tenant in {
+            "pessoas": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "planos": [("academia_id", "INTEGER")],
+            "usuarios": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "professores": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "exercicios": [("academia_id", "INTEGER")],
+            "catracas": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "agentes_locais": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "logs_acesso": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "logs_admin": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+            "storage_objects": [("academia_id", "INTEGER"), ("unidade_id", "INTEGER")],
+        }.items():
+            existe = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone()
+            if not existe:
+                continue
+            for coluna, definicao in colunas_tenant:
+                _adicionar_coluna(conn, tabela, coluna, definicao)
+
+        for tabela in ("pessoas","usuarios","professores","catracas","agentes_locais","logs_acesso","logs_admin","storage_objects"):
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone():
+                conn.execute(f"UPDATE {tabela} SET academia_id=1 WHERE academia_id IS NULL")
+                conn.execute(f"UPDATE {tabela} SET unidade_id=1 WHERE unidade_id IS NULL")
+        for tabela in ("planos","exercicios"):
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone():
+                conn.execute(f"UPDATE {tabela} SET academia_id=1 WHERE academia_id IS NULL")
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pessoas_tenant ON pessoas(academia_id,unidade_id,id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_tenant ON usuarios(academia_id,unidade_id,ativo)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_professores_tenant ON professores(academia_id,unidade_id,ativo)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_catracas_tenant ON catracas(academia_id,unidade_id,ativa)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_agentes_tenant ON agentes_locais(academia_id,unidade_id,ativo)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_logs_tenant_data ON logs_acesso(academia_id,unidade_id,data_hora DESC)")
+
         # Defaults de planos/configuracoes/catraca.
         for nome, valor, dias, descricao in DEFAULT_PLANS:
             conn.execute(
-                "INSERT OR IGNORE INTO planos (nome, valor_centavos, duracao_dias, descricao, ativo) VALUES (?, ?, ?, ?, 1)",
+                "INSERT OR IGNORE INTO planos (nome, valor_centavos, duracao_dias, descricao, ativo, academia_id) VALUES (?, ?, ?, ?, 1, 1)",
                 (nome, valor, dias, descricao),
             )
         # Agora que os planos padrao existem, conclui a associacao dos cadastros legados.
@@ -1111,7 +1280,7 @@ def criar_tabelas():
                 "INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)", (chave, valor)
             )
         conn.execute(
-            "INSERT OR IGNORE INTO catracas (id, nome, local, modo, ativa) VALUES (1, 'Catraca 01 - Entrada', 'Entrada principal', 'SIMULADA', 1)"
+            "INSERT OR IGNORE INTO catracas (id, nome, local, modo, ativa, academia_id, unidade_id) VALUES (1, 'Catraca 01 - Entrada', 'Entrada principal', 'SIMULADA', 1, 1, 1)"
         )
         # Se a configuracao aponta para uma catraca inexistente, aponta para a primeira ativa.
         row = conn.execute("SELECT valor FROM configuracoes WHERE chave = 'catraca_padrao_id'").fetchone()
@@ -1129,6 +1298,157 @@ def criar_tabelas():
         conn.commit()
     finally:
         conn.close()
+
+
+
+# ---------- Multiacademia / unidades (Schema 23) ----------
+
+def listar_academias(apenas_ativas: bool = False) -> list[dict]:
+    conn = conectar()
+    try:
+        sql = "SELECT * FROM academias"
+        params = []
+        if apenas_ativas:
+            sql += " WHERE ativo=1"
+        sql += " ORDER BY nome,id"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    finally:
+        conn.close()
+
+
+def obter_academia(academia_id: int) -> dict | None:
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM academias WHERE id=?", (int(academia_id),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def obter_academia_por_slug(slug: str) -> dict | None:
+    slug = str(slug or "principal").strip().lower()
+    conn = conectar()
+    try:
+        row = conn.execute("SELECT * FROM academias WHERE LOWER(slug)=LOWER(?) AND ativo=1", (slug,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def criar_academia(nome: str, slug: str, *, documento=None, email=None, telefone=None) -> dict:
+    nome = str(nome or "").strip()
+    slug = str(slug or "").strip().lower()
+    if not nome or not slug:
+        raise ValueError("Nome e codigo da academia sao obrigatorios.")
+    if not all(c.isalnum() or c in "-_" for c in slug):
+        raise ValueError("Codigo da academia invalido.")
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            "INSERT INTO academias(nome,slug,documento,email,telefone,ativo) VALUES(?,?,?,?,?,1)",
+            (nome, slug, documento, email, telefone),
+        )
+        academia_id = int(cur.lastrowid)
+        unidade_cur = conn.execute(
+            "INSERT INTO unidades(academia_id,nome,codigo,ativo) VALUES(?,?,?,1)",
+            (academia_id, "Unidade Principal", "principal"),
+        )
+        unidade_id = int(unidade_cur.lastrowid)
+        for plano_nome, valor, dias, descricao in DEFAULT_PLANS:
+            conn.execute(
+                "INSERT INTO planos(nome,valor_centavos,duracao_dias,descricao,ativo,academia_id) VALUES(?,?,?,?,1,?)",
+                (plano_nome, valor, dias, descricao, academia_id),
+            )
+        conn.execute(
+            "INSERT INTO catracas(nome,local,modo,ativa,academia_id,unidade_id) VALUES(?,?,?,?,?,?)",
+            ("Catraca 01 - Entrada", "Entrada principal", "SIMULADA", 1, academia_id, unidade_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM academias WHERE id=?", (academia_id,)).fetchone()
+        return dict(row)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def listar_unidades(academia_id: int | None = None, apenas_ativas: bool = False) -> list[dict]:
+    academia_id = int(academia_id or academia_atual_id())
+    conn = conectar()
+    try:
+        sql = "SELECT * FROM unidades WHERE academia_id=?"
+        params = [academia_id]
+        if apenas_ativas:
+            sql += " AND ativo=1"
+        sql += " ORDER BY nome,id"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    finally:
+        conn.close()
+
+
+def obter_unidade(unidade_id: int, academia_id: int | None = None) -> dict | None:
+    academia_id = int(academia_id or academia_atual_id())
+    conn = conectar()
+    try:
+        row = conn.execute(
+            "SELECT * FROM unidades WHERE id=? AND academia_id=?",
+            (int(unidade_id), academia_id),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def obter_unidade_por_codigo(academia_id: int, codigo: str) -> dict | None:
+    codigo = str(codigo or "principal").strip().lower()
+    conn = conectar()
+    try:
+        row = conn.execute(
+            "SELECT * FROM unidades WHERE academia_id=? AND LOWER(codigo)=LOWER(?) AND ativo=1",
+            (int(academia_id), codigo),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def criar_unidade(academia_id: int, nome: str, codigo: str, *, endereco=None) -> dict:
+    nome = str(nome or "").strip()
+    codigo = str(codigo or "").strip().lower()
+    if not nome or not codigo:
+        raise ValueError("Nome e codigo da unidade sao obrigatorios.")
+    if not all(c.isalnum() or c in "-_" for c in codigo):
+        raise ValueError("Codigo da unidade invalido.")
+    conn = conectar()
+    try:
+        cur = conn.execute(
+            "INSERT INTO unidades(academia_id,nome,codigo,endereco,ativo) VALUES(?,?,?,?,1)",
+            (int(academia_id), nome, codigo, endereco),
+        )
+        unidade_id = int(cur.lastrowid)
+        conn.execute(
+            "INSERT INTO catracas(nome,local,modo,ativa,academia_id,unidade_id) VALUES(?,?,?,?,?,?)",
+            ("Catraca 01 - Entrada", "Entrada principal", "SIMULADA", 1, int(academia_id), unidade_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM unidades WHERE id=?", (unidade_id,)).fetchone()
+        return dict(row)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def resolver_tenant(academia_slug: str | None = None, unidade_codigo: str | None = None) -> dict | None:
+    academia = obter_academia_por_slug(academia_slug or "principal")
+    if not academia:
+        return None
+    unidade = obter_unidade_por_codigo(int(academia["id"]), unidade_codigo or "principal")
+    if not unidade:
+        return None
+    return {"academia": academia, "unidade": unidade}
 
 
 def _encoding_para_json(encoding: np.ndarray) -> str:
@@ -1184,8 +1504,8 @@ def adicionar_pessoa(dados, encodings=None, foto_path=None, liberado=True):
             INSERT INTO pessoas (
                 nome, encoding, liberado, cpf, data_nascimento, sexo, telefone, email,
                 matricula, plano, plano_id, data_inicio, data_vencimento,
-                status_financeiro, observacoes, foto_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status_financeiro, observacoes, foto_path, academia_id, unidade_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 dados["nome"], primeiro_encoding, int(bool(dados.get("liberado", True))),
@@ -1193,7 +1513,7 @@ def adicionar_pessoa(dados, encodings=None, foto_path=None, liberado=True):
                 dados.get("telefone"), dados.get("email"), dados["matricula"],
                 dados.get("plano"), dados.get("plano_id"), dados.get("data_inicio"),
                 dados.get("data_vencimento"), dados.get("status_financeiro", "EM_DIA"),
-                dados.get("observacoes"), foto_path,
+                dados.get("observacoes"), foto_path, academia_atual_id(), unidade_atual_id(),
             ),
         )
         pessoa_id = int(cur.lastrowid)
@@ -1218,7 +1538,7 @@ def atualizar_pessoa(pessoa_id: int, dados: dict):
             """
             UPDATE pessoas SET nome=?, cpf=?, data_nascimento=?, sexo=?, telefone=?, email=?,
                 matricula=?, plano=?, plano_id=?, data_inicio=?, data_vencimento=?,
-                status_financeiro=?, observacoes=?, liberado=? WHERE id=?
+                status_financeiro=?, observacoes=?, liberado=? WHERE id=? AND academia_id=? AND unidade_id=?
             """,
             (
                 dados["nome"], dados["cpf"], dados.get("data_nascimento") or None,
@@ -1226,7 +1546,7 @@ def atualizar_pessoa(pessoa_id: int, dados: dict):
                 dados.get("email") or None, dados["matricula"], dados.get("plano"),
                 dados.get("plano_id"), dados.get("data_inicio") or None,
                 dados.get("data_vencimento") or None, dados.get("status_financeiro", "EM_DIA"),
-                dados.get("observacoes") or None, int(bool(dados.get("liberado", True))), pessoa_id,
+                dados.get("observacoes") or None, int(bool(dados.get("liberado", True))), pessoa_id, academia_atual_id(), unidade_atual_id(),
             ),
         )
         conn.commit()
@@ -1268,6 +1588,8 @@ def _row_pessoa(row):
         "plano": row["plano"], "plano_id": row["plano_id"], "data_inicio": row["data_inicio"],
         "data_vencimento": row["data_vencimento"], "status_financeiro": row["status_financeiro"],
         "observacoes": row["observacoes"], "foto_path": row["foto_path"],
+        "academia_id": row["academia_id"] if "academia_id" in row.keys() else 1,
+        "unidade_id": row["unidade_id"] if "unidade_id" in row.keys() else 1,
     }
 
 
@@ -1277,9 +1599,9 @@ def listar_pessoas():
         rows = conn.execute(
             """
             SELECT id,nome,encoding,liberado,data_cadastro,cpf,data_nascimento,sexo,telefone,email,
-                   matricula,plano,plano_id,data_inicio,data_vencimento,status_financeiro,observacoes,foto_path
-            FROM pessoas ORDER BY nome COLLATE NOCASE
-            """
+                   matricula,plano,plano_id,data_inicio,data_vencimento,status_financeiro,observacoes,foto_path,academia_id,unidade_id
+            FROM pessoas WHERE academia_id=? AND unidade_id=? ORDER BY nome COLLATE NOCASE
+            """, (academia_atual_id(), unidade_atual_id())
         ).fetchall()
         return [_row_pessoa(row) for row in rows]
     finally:
@@ -1294,8 +1616,8 @@ def listar_pessoas_com_ultimo_acesso():
             SELECT p.id,p.nome,p.cpf,p.matricula,p.plano,p.plano_id,p.data_vencimento,p.status_financeiro,
                    p.liberado,p.foto_path,
                    (SELECT l.data_hora FROM logs_acesso l WHERE l.pessoa_id=p.id ORDER BY l.id DESC LIMIT 1) AS ultimo_acesso
-            FROM pessoas p ORDER BY p.nome COLLATE NOCASE
-            """
+            FROM pessoas p WHERE p.academia_id=? AND p.unidade_id=? ORDER BY p.nome COLLATE NOCASE
+            """, (academia_atual_id(), unidade_atual_id())
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -1308,9 +1630,9 @@ def obter_pessoa(pessoa_id: int):
         row = conn.execute(
             """
             SELECT id,nome,encoding,liberado,data_cadastro,cpf,data_nascimento,sexo,telefone,email,
-                   matricula,plano,plano_id,data_inicio,data_vencimento,status_financeiro,observacoes,foto_path
-            FROM pessoas WHERE id=?
-            """, (pessoa_id,)
+                   matricula,plano,plano_id,data_inicio,data_vencimento,status_financeiro,observacoes,foto_path,academia_id,unidade_id
+            FROM pessoas WHERE id=? AND academia_id=? AND unidade_id=?
+            """, (pessoa_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return _row_pessoa(row) if row else None
     finally:
@@ -1320,7 +1642,11 @@ def obter_pessoa(pessoa_id: int):
 def listar_amostras_faciais():
     conn = conectar()
     try:
-        rows = conn.execute("SELECT pessoa_id,encoding FROM face_encodings ORDER BY pessoa_id,ordem").fetchall()
+        rows = conn.execute(
+            "SELECT f.pessoa_id,f.encoding FROM face_encodings f JOIN pessoas p ON p.id=f.pessoa_id "
+            "WHERE p.academia_id=? AND p.unidade_id=? ORDER BY f.pessoa_id,f.ordem",
+            (academia_atual_id(), unidade_atual_id()),
+        ).fetchall()
         por_pessoa: dict[int, list[np.ndarray]] = {}
         for row in rows:
             por_pessoa.setdefault(int(row["pessoa_id"]), []).append(_encoding_de_json(row["encoding"]))
@@ -1338,18 +1664,19 @@ def registrar_storage_object(*, referencia: str, object_key: str, backend: str, 
             """
             INSERT INTO storage_objects(
                 referencia,object_key,backend,bucket,categoria,content_type,size_bytes,sha256,
-                owner_type,owner_id,retention_until,status,updated_at,deleted_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL)
+                owner_type,owner_id,retention_until,status,updated_at,deleted_at,academia_id,unidade_id
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',CURRENT_TIMESTAMP,NULL,?,?)
             ON CONFLICT(referencia) DO UPDATE SET
                 object_key=excluded.object_key,backend=excluded.backend,bucket=excluded.bucket,
                 categoria=excluded.categoria,content_type=excluded.content_type,size_bytes=excluded.size_bytes,
                 sha256=excluded.sha256,owner_type=COALESCE(excluded.owner_type,storage_objects.owner_type),
                 owner_id=COALESCE(excluded.owner_id,storage_objects.owner_id),
                 retention_until=COALESCE(excluded.retention_until,storage_objects.retention_until),
-                status='ACTIVE',updated_at=CURRENT_TIMESTAMP,deleted_at=NULL
+                status='ACTIVE',updated_at=CURRENT_TIMESTAMP,deleted_at=NULL,
+                academia_id=excluded.academia_id,unidade_id=excluded.unidade_id
             """,
             (referencia,object_key,backend,bucket,categoria,content_type,int(size_bytes or 0),sha256,
-             owner_type,int(owner_id) if owner_id is not None else None,retention_until),
+             owner_type,int(owner_id) if owner_id is not None else None,retention_until,academia_atual_id(),unidade_atual_id()),
         )
         conn.commit()
         return obter_storage_object(referencia) or {}
@@ -1360,7 +1687,7 @@ def registrar_storage_object(*, referencia: str, object_key: str, backend: str, 
 def obter_storage_object(referencia: str) -> dict | None:
     conn = conectar()
     try:
-        row = conn.execute("SELECT * FROM storage_objects WHERE referencia=?", (str(referencia),)).fetchone()
+        row = conn.execute("SELECT * FROM storage_objects WHERE referencia=? AND academia_id=? AND unidade_id=?", (str(referencia), academia_atual_id(), unidade_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -1374,15 +1701,15 @@ def vincular_storage_object(referencia: str, *, owner_type: str, owner_id: int,
             cur = conn.execute(
                 """UPDATE storage_objects SET owner_type=?,owner_id=?,categoria=?,
                    retention_until=COALESCE(?,retention_until),updated_at=CURRENT_TIMESTAMP
-                   WHERE referencia=? AND status='ACTIVE'""",
-                (str(owner_type)[:80],int(owner_id),str(categoria)[:80],retention_until,str(referencia)),
+                   WHERE referencia=? AND status='ACTIVE' AND academia_id=? AND unidade_id=?""",
+                (str(owner_type)[:80],int(owner_id),str(categoria)[:80],retention_until,str(referencia),academia_atual_id(),unidade_atual_id()),
             )
         else:
             cur = conn.execute(
                 """UPDATE storage_objects SET owner_type=?,owner_id=?,
                    retention_until=COALESCE(?,retention_until),updated_at=CURRENT_TIMESTAMP
-                   WHERE referencia=? AND status='ACTIVE'""",
-                (str(owner_type)[:80],int(owner_id),retention_until,str(referencia)),
+                   WHERE referencia=? AND status='ACTIVE' AND academia_id=? AND unidade_id=?""",
+                (str(owner_type)[:80],int(owner_id),retention_until,str(referencia),academia_atual_id(),unidade_atual_id()),
             )
         conn.commit()
         return cur.rowcount > 0
@@ -1395,8 +1722,8 @@ def marcar_storage_object_excluido(referencia: str) -> bool:
     try:
         cur = conn.execute(
             """UPDATE storage_objects SET status='DELETED',deleted_at=CURRENT_TIMESTAMP,
-               updated_at=CURRENT_TIMESTAMP WHERE referencia=? AND status<>'DELETED'""",
-            (str(referencia),),
+               updated_at=CURRENT_TIMESTAMP WHERE referencia=? AND status<>'DELETED' AND academia_id=? AND unidade_id=?""",
+            (str(referencia), academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
         return cur.rowcount > 0
@@ -1405,8 +1732,8 @@ def marcar_storage_object_excluido(referencia: str) -> bool:
 
 
 def listar_storage_objects(*, status: str | None = None, owner_type: str | None = None, owner_id=None) -> list[dict]:
-    sql = "SELECT * FROM storage_objects WHERE 1=1"
-    params = []
+    sql = "SELECT * FROM storage_objects WHERE academia_id=? AND unidade_id=?"
+    params = [academia_atual_id(), unidade_atual_id()]
     if status:
         sql += " AND status=?"
         params.append(str(status).upper())
@@ -1436,7 +1763,7 @@ def obter_perfil_biometrico(pessoa_id: int) -> dict | None:
 def listar_perfis_biometricos() -> dict[int, dict]:
     conn = conectar()
     try:
-        rows = conn.execute("SELECT * FROM biometric_profiles").fetchall()
+        rows = conn.execute("SELECT b.* FROM biometric_profiles b JOIN pessoas p ON p.id=b.pessoa_id WHERE p.academia_id=? AND p.unidade_id=?", (academia_atual_id(), unidade_atual_id())).fetchall()
         return {int(r["pessoa_id"]): dict(r) for r in rows}
     finally:
         conn.close()
@@ -1445,7 +1772,7 @@ def listar_perfis_biometricos() -> dict[int, dict]:
 def atualizar_liberacao(pessoa_id: int, liberado: bool) -> bool:
     conn = conectar()
     try:
-        cur = conn.execute("UPDATE pessoas SET liberado=? WHERE id=?", (int(liberado), pessoa_id))
+        cur = conn.execute("UPDATE pessoas SET liberado=? WHERE id=? AND academia_id=? AND unidade_id=?", (int(liberado), pessoa_id, academia_atual_id(), unidade_atual_id()))
         conn.commit()
         return cur.rowcount > 0
     finally:
@@ -1483,11 +1810,12 @@ def remover_pessoa(pessoa_id: int) -> bool:
 def listar_planos(ativos_apenas=False):
     conn = conectar()
     try:
-        sql = "SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro FROM planos"
+        sql = "SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,academia_id FROM planos WHERE academia_id=?"
+        params = [academia_atual_id()]
         if ativos_apenas:
-            sql += " WHERE ativo=1"
+            sql += " AND ativo=1"
         sql += " ORDER BY duracao_dias"
-        return [dict(row) for row in conn.execute(sql).fetchall()]
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
     finally:
         conn.close()
 
@@ -1495,7 +1823,7 @@ def listar_planos(ativos_apenas=False):
 def obter_plano(plano_id: int):
     conn = conectar()
     try:
-        row = conn.execute("SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro FROM planos WHERE id=?", (plano_id,)).fetchone()
+        row = conn.execute("SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,data_cadastro,academia_id FROM planos WHERE id=? AND academia_id=?", (plano_id, academia_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -1504,7 +1832,7 @@ def obter_plano(plano_id: int):
 def obter_plano_por_nome(nome: str):
     conn = conectar()
     try:
-        row = conn.execute("SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo FROM planos WHERE nome=?", (nome,)).fetchone()
+        row = conn.execute("SELECT id,nome,valor_centavos,duracao_dias,descricao,ativo,academia_id FROM planos WHERE nome=? AND academia_id=?", (nome, academia_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -1515,13 +1843,13 @@ def salvar_plano(dados: dict, plano_id: int | None = None):
     try:
         if plano_id:
             conn.execute(
-                "UPDATE planos SET nome=?,valor_centavos=?,duracao_dias=?,descricao=?,ativo=? WHERE id=?",
-                (dados["nome"], dados["valor_centavos"], dados["duracao_dias"], dados.get("descricao"), int(bool(dados.get("ativo", True))), plano_id),
+                "UPDATE planos SET nome=?,valor_centavos=?,duracao_dias=?,descricao=?,ativo=? WHERE id=? AND academia_id=?",
+                (dados["nome"], dados["valor_centavos"], dados["duracao_dias"], dados.get("descricao"), int(bool(dados.get("ativo", True))), plano_id, academia_atual_id()),
             )
         else:
             cur = conn.execute(
-                "INSERT INTO planos (nome,valor_centavos,duracao_dias,descricao,ativo) VALUES (?,?,?,?,?)",
-                (dados["nome"], dados["valor_centavos"], dados["duracao_dias"], dados.get("descricao"), int(bool(dados.get("ativo", True)))),
+                "INSERT INTO planos (nome,valor_centavos,duracao_dias,descricao,ativo,academia_id) VALUES (?,?,?,?,?,?)",
+                (dados["nome"], dados["valor_centavos"], dados["duracao_dias"], dados.get("descricao"), int(bool(dados.get("ativo", True))), academia_atual_id()),
             )
             plano_id = int(cur.lastrowid)
         conn.commit()
@@ -1613,22 +1941,24 @@ def registrar_log(pessoa_id, nome, status, motivo, cpf=None, matricula=None, jan
                 """
                 SELECT 1 FROM logs_acesso WHERE pessoa_id=? AND status=?
                   AND COALESCE(catraca_id,0)=COALESCE(?,0)
+                  AND academia_id=? AND unidade_id=?
                   AND data_hora >= ? ORDER BY id DESC LIMIT 1
-                """, (pessoa_id, status, catraca_id, limite)
+                """, (pessoa_id, status, catraca_id, academia_atual_id(), unidade_atual_id(), limite)
             ).fetchone()
         else:
             repetido = conn.execute(
                 """
                 SELECT 1 FROM logs_acesso WHERE pessoa_id IS NULL AND nome=? AND status=?
                   AND COALESCE(catraca_id,0)=COALESCE(?,0)
+                  AND academia_id=? AND unidade_id=?
                   AND data_hora >= ? ORDER BY id DESC LIMIT 1
-                """, (nome, status, catraca_id, limite)
+                """, (nome, status, catraca_id, academia_atual_id(), unidade_atual_id(), limite)
             ).fetchone()
         if repetido:
             return False
         conn.execute(
-            "INSERT INTO logs_acesso (pessoa_id,nome,cpf,matricula,status,motivo,catraca_id,catraca_nome) VALUES (?,?,?,?,?,?,?,?)",
-            (pessoa_id, nome, cpf, matricula, status, motivo, catraca_id, catraca_nome),
+            "INSERT INTO logs_acesso (pessoa_id,nome,cpf,matricula,status,motivo,catraca_id,catraca_nome,academia_id,unidade_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (pessoa_id, nome, cpf, matricula, status, motivo, catraca_id, catraca_nome, academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
         return True
@@ -1640,7 +1970,7 @@ def listar_logs(limite=50, filtros=None):
     filtros = filtros or {}
     conn = conectar()
     try:
-        where, params = [], []
+        where, params = ["academia_id=?", "unidade_id=?"], [academia_atual_id(), unidade_atual_id()]
         if filtros.get("data_inicio"):
             where.append("data_hora >= ?"); params.append(str(filtros["data_inicio"])[:10])
         if filtros.get("data_fim"):
@@ -1672,11 +2002,11 @@ def listar_logs_pessoa(pessoa_id: int, limite=20):
             """
             SELECT id,pessoa_id,nome,cpf,matricula,status,motivo,data_hora,catraca_id,catraca_nome
             FROM logs_acesso
-            WHERE pessoa_id=?
+            WHERE pessoa_id=? AND academia_id=? AND unidade_id=?
             ORDER BY id DESC
             LIMIT ?
             """,
-            (int(pessoa_id), int(limite)),
+            (int(pessoa_id), academia_atual_id(), unidade_atual_id(), int(limite)),
         ).fetchall()
         return [dict(row) for row in rows]
     finally:
@@ -1685,7 +2015,7 @@ def listar_logs_pessoa(pessoa_id: int, limite=20):
 def listar_logs_publicos(limite=8):
     conn = conectar()
     try:
-        rows = conn.execute("SELECT nome,status,motivo,data_hora FROM logs_acesso ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
+        rows = conn.execute("SELECT nome,status,motivo,data_hora FROM logs_acesso WHERE academia_id=? AND unidade_id=? ORDER BY id DESC LIMIT ?", (academia_atual_id(), unidade_atual_id(), limite)).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()
@@ -1709,7 +2039,7 @@ def dashboard():
         row = conn.execute(
             "SELECT COUNT(*) total, SUM(CASE WHEN status='LIBERADO' THEN 1 ELSE 0 END) liberados, "
             "SUM(CASE WHEN status='BLOQUEADO' THEN 1 ELSE 0 END) bloqueados, SUM(CASE WHEN status='NEGADO' THEN 1 ELSE 0 END) negados "
-            "FROM logs_acesso WHERE data_hora>=? AND data_hora<?", (hoje, amanha)
+            "FROM logs_acesso WHERE academia_id=? AND unidade_id=? AND data_hora>=? AND data_hora<?", (academia_atual_id(), unidade_atual_id(), hoje, amanha)
         ).fetchone()
         acessos_hoje = int(row["total"] or 0)
         liberados_hoje = int(row["liberados"] or 0)
@@ -1719,25 +2049,26 @@ def dashboard():
         limite_24h = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         for r in conn.execute(
             "SELECT CAST(SUBSTR(data_hora,12,2) AS INTEGER) h, COUNT(*) n "
-            "FROM logs_acesso WHERE data_hora >= ? GROUP BY h", (limite_24h,)
+            "FROM logs_acesso WHERE academia_id=? AND unidade_id=? AND data_hora >= ? GROUP BY h", (academia_atual_id(), unidade_atual_id(), limite_24h)
         ).fetchall():
             horarios[int(r["h"])] = int(r["n"])
         ate = (date.today() + timedelta(days=7)).isoformat()
         vencendo = conn.execute(
             "SELECT id,nome,matricula,plano,data_vencimento FROM pessoas "
-            "WHERE data_vencimento IS NOT NULL AND data_vencimento BETWEEN ? AND ? "
+            "WHERE academia_id=? AND unidade_id=? AND data_vencimento IS NOT NULL AND data_vencimento BETWEEN ? AND ? "
             "ORDER BY data_vencimento,nome",
-            (hoje, ate),
+            (academia_atual_id(), unidade_atual_id(), hoje, ate),
         ).fetchall()
-        ultimos = conn.execute("SELECT nome,status,motivo,data_hora,catraca_nome FROM logs_acesso ORDER BY id DESC LIMIT 10").fetchall()
+        ultimos = conn.execute("SELECT nome,status,motivo,data_hora,catraca_nome FROM logs_acesso WHERE academia_id=? AND unidade_id=? ORDER BY id DESC LIMIT 10", (academia_atual_id(), unidade_atual_id())).fetchall()
         alunos_acessos = conn.execute(
             """
             SELECT p.id,p.nome,p.matricula,p.plano,p.data_vencimento,p.liberado,
                    (SELECT l.data_hora FROM logs_acesso l WHERE l.pessoa_id=p.id ORDER BY l.id DESC LIMIT 1) AS ultimo_acesso
             FROM pessoas p
+            WHERE p.academia_id=? AND p.unidade_id=?
             ORDER BY CASE WHEN ultimo_acesso IS NULL THEN 1 ELSE 0 END, ultimo_acesso DESC, p.nome COLLATE NOCASE
             LIMIT 8
-            """
+            """, (academia_atual_id(), unidade_atual_id())
         ).fetchall()
         pico = max(horarios, default=0) or 1
         horarios_chart = [
@@ -1759,9 +2090,9 @@ def cpf_existe(cpf, ignorar_id=None):
     conn = conectar()
     try:
         if ignorar_id is None:
-            row = conn.execute("SELECT 1 FROM pessoas WHERE cpf=? LIMIT 1", (cpf,)).fetchone()
+            row = conn.execute("SELECT 1 FROM pessoas WHERE cpf=? AND academia_id=? AND unidade_id=? LIMIT 1", (cpf, academia_atual_id(), unidade_atual_id())).fetchone()
         else:
-            row = conn.execute("SELECT 1 FROM pessoas WHERE cpf=? AND id<>? LIMIT 1", (cpf, ignorar_id)).fetchone()
+            row = conn.execute("SELECT 1 FROM pessoas WHERE cpf=? AND id<>? AND academia_id=? AND unidade_id=? LIMIT 1", (cpf, ignorar_id, academia_atual_id(), unidade_atual_id())).fetchone()
         return row is not None
     finally:
         conn.close()
@@ -1771,9 +2102,9 @@ def matricula_existe(matricula, ignorar_id=None):
     conn = conectar()
     try:
         if ignorar_id is None:
-            row = conn.execute("SELECT 1 FROM pessoas WHERE matricula=? LIMIT 1", (matricula,)).fetchone()
+            row = conn.execute("SELECT 1 FROM pessoas WHERE matricula=? AND academia_id=? AND unidade_id=? LIMIT 1", (matricula, academia_atual_id(), unidade_atual_id())).fetchone()
         else:
-            row = conn.execute("SELECT 1 FROM pessoas WHERE matricula=? AND id<>? LIMIT 1", (matricula, ignorar_id)).fetchone()
+            row = conn.execute("SELECT 1 FROM pessoas WHERE matricula=? AND id<>? AND academia_id=? AND unidade_id=? LIMIT 1", (matricula, ignorar_id, academia_atual_id(), unidade_atual_id())).fetchone()
         return row is not None
     finally:
         conn.close()
@@ -1796,8 +2127,8 @@ def obter_pessoa_por_primeiro_acesso(cpf: str, matricula: str, data_nascimento: 
         row = conn.execute(
             """SELECT * FROM pessoas
                WHERE cpf=? AND UPPER(TRIM(matricula))=UPPER(TRIM(?))
-                 AND data_nascimento=? LIMIT 1""",
-            (cpf, matricula, data_nascimento),
+                 AND data_nascimento=? AND academia_id=? AND unidade_id=? LIMIT 1""",
+            (cpf, matricula, data_nascimento, academia_atual_id(), unidade_atual_id()),
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -1810,7 +2141,7 @@ def obter_acesso_aluno_por_cpf(cpf: str):
         row = conn.execute(
             """SELECT aa.*,p.nome,p.matricula,p.foto_path,p.cpf
                FROM aluno_acessos aa JOIN pessoas p ON p.id=aa.pessoa_id
-               WHERE p.cpf=? LIMIT 1""", (cpf,)
+               WHERE p.cpf=? AND p.academia_id=? AND p.unidade_id=? LIMIT 1""", (cpf, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -1827,9 +2158,9 @@ def buscar_alunos_global(termo: str, limite=8):
         return [dict(r) for r in conn.execute(
             """SELECT id,nome,cpf,matricula,plano,data_vencimento,foto_path
                FROM pessoas
-               WHERE LOWER(nome) LIKE LOWER(?) OR cpf LIKE ? OR LOWER(matricula) LIKE LOWER(?)
+               WHERE academia_id=? AND unidade_id=? AND (LOWER(nome) LIKE LOWER(?) OR cpf LIKE ? OR LOWER(matricula) LIKE LOWER(?))
                ORDER BY CASE WHEN LOWER(matricula)=LOWER(?) THEN 0 ELSE 1 END,LOWER(nome)
-               LIMIT ?""", (like,like,like,q,int(limite))
+               LIMIT ?""", (academia_atual_id(),unidade_atual_id(),like,like,like,q,int(limite))
         ).fetchall()]
     finally:
         conn.close()
@@ -1838,10 +2169,11 @@ def buscar_alunos_global(termo: str, limite=8):
 def listar_catracas(apenas_ativas=False):
     conn = conectar()
     try:
-        sql = "SELECT id,nome,local,modo,endpoint,ativa,data_cadastro FROM catracas"
-        if apenas_ativas: sql += " WHERE ativa=1"
+        sql = "SELECT id,nome,local,modo,endpoint,ativa,data_cadastro,academia_id,unidade_id FROM catracas WHERE academia_id=? AND unidade_id=?"
+        params = [academia_atual_id(), unidade_atual_id()]
+        if apenas_ativas: sql += " AND ativa=1"
         sql += " ORDER BY id"
-        return [dict(r) for r in conn.execute(sql).fetchall()]
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
     finally:
         conn.close()
 
@@ -1849,7 +2181,7 @@ def listar_catracas(apenas_ativas=False):
 def obter_catraca(catraca_id: int):
     conn = conectar()
     try:
-        row = conn.execute("SELECT id,nome,local,modo,endpoint,ativa,data_cadastro FROM catracas WHERE id=?", (catraca_id,)).fetchone()
+        row = conn.execute("SELECT id,nome,local,modo,endpoint,ativa,data_cadastro,academia_id,unidade_id FROM catracas WHERE id=? AND academia_id=? AND unidade_id=?", (catraca_id, academia_atual_id(), unidade_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -1859,11 +2191,11 @@ def salvar_catraca(dados: dict, catraca_id=None):
     conn = conectar()
     try:
         if catraca_id:
-            conn.execute("UPDATE catracas SET nome=?,local=?,modo=?,endpoint=?,ativa=? WHERE id=?", (dados["nome"],dados.get("local"),dados.get("modo","SIMULADA"),dados.get("endpoint"),int(bool(dados.get("ativa",True))),catraca_id))
+            conn.execute("UPDATE catracas SET nome=?,local=?,modo=?,endpoint=?,ativa=? WHERE id=? AND academia_id=? AND unidade_id=?", (dados["nome"],dados.get("local"),dados.get("modo","SIMULADA"),dados.get("endpoint"),int(bool(dados.get("ativa",True))),catraca_id,academia_atual_id(),unidade_atual_id()))
         else:
             cur = conn.execute(
-                "INSERT INTO catracas (nome,local,modo,endpoint,ativa) VALUES (?,?,?,?,?)",
-                (dados["nome"], dados.get("local"), dados.get("modo", "SIMULADA"), dados.get("endpoint"), int(bool(dados.get("ativa", True)))),
+                "INSERT INTO catracas (nome,local,modo,endpoint,ativa,academia_id,unidade_id) VALUES (?,?,?,?,?,?,?)",
+                (dados["nome"], dados.get("local"), dados.get("modo", "SIMULADA"), dados.get("endpoint"), int(bool(dados.get("ativa", True))), academia_atual_id(), unidade_atual_id()),
             )
             catraca_id = cur.lastrowid
         conn.commit(); return int(catraca_id)
@@ -1871,16 +2203,27 @@ def salvar_catraca(dados: dict, catraca_id=None):
         conn.close()
 
 
+def _config_tenant_key(chave: str) -> str:
+    return f"tenant:{academia_atual_id()}:{unidade_atual_id()}:{chave}"
+
+
 def obter_configuracoes():
     conn=conectar()
-    try: return {r["chave"]: r["valor"] for r in conn.execute("SELECT chave,valor FROM configuracoes").fetchall()}
+    try:
+        base = {r["chave"]: r["valor"] for r in conn.execute("SELECT chave,valor FROM configuracoes WHERE chave NOT LIKE 'tenant:%'").fetchall()}
+        prefix = f"tenant:{academia_atual_id()}:{unidade_atual_id()}:"
+        for r in conn.execute("SELECT chave,valor FROM configuracoes WHERE chave LIKE ?", (prefix + "%",)).fetchall():
+            base[str(r["chave"])[len(prefix):]] = r["valor"]
+        return base
     finally: conn.close()
 
 
 def obter_configuracao(chave, padrao=None):
     conn=conectar()
     try:
-        row=conn.execute("SELECT valor FROM configuracoes WHERE chave=?", (chave,)).fetchone()
+        row=conn.execute("SELECT valor FROM configuracoes WHERE chave=?", (_config_tenant_key(chave),)).fetchone()
+        if not row:
+            row=conn.execute("SELECT valor FROM configuracoes WHERE chave=?", (chave,)).fetchone()
         return row[0] if row else padrao
     finally: conn.close()
 
@@ -1889,7 +2232,8 @@ def salvar_configuracoes(dados: dict):
     conn=conectar()
     try:
         for chave, valor in dados.items():
-            conn.execute("INSERT INTO configuracoes (chave,valor,data_atualizacao) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor,data_atualizacao=CURRENT_TIMESTAMP", (chave,str(valor)))
+            chave_tenant = _config_tenant_key(chave)
+            conn.execute("INSERT INTO configuracoes (chave,valor,data_atualizacao) VALUES (?,?,CURRENT_TIMESTAMP) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor,data_atualizacao=CURRENT_TIMESTAMP", (chave_tenant,str(valor)))
         conn.commit()
     finally: conn.close()
 
@@ -1900,9 +2244,9 @@ def registrar_log_admin(acao: str, alvo=None, detalhes=None, ip=None):
     conn = conectar()
     try:
         conn.execute(
-            "INSERT INTO logs_admin (acao, alvo, detalhes, ip) VALUES (?, ?, ?, ?)",
+            "INSERT INTO logs_admin (acao, alvo, detalhes, ip, academia_id, unidade_id) VALUES (?, ?, ?, ?, ?, ?)",
             (str(acao)[:80], str(alvo)[:160] if alvo else None,
-             str(detalhes)[:1000] if detalhes else None, str(ip)[:80] if ip else None),
+             str(detalhes)[:1000] if detalhes else None, str(ip)[:80] if ip else None, academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
     finally:
@@ -1913,7 +2257,7 @@ def listar_logs_admin(limite=100):
     conn = conectar()
     try:
         return [dict(r) for r in conn.execute(
-            "SELECT * FROM logs_admin ORDER BY id DESC LIMIT ?", (max(1, min(int(limite), 500)),)
+            "SELECT * FROM logs_admin WHERE academia_id=? AND unidade_id=? ORDER BY id DESC LIMIT ?", (academia_atual_id(), unidade_atual_id(), max(1, min(int(limite), 500)))
         ).fetchall()]
     finally:
         conn.close()
@@ -2336,7 +2680,7 @@ def registrar_evento_cobranca_sem_acao(payment_id, event_id, evento, data_evento
 def garantir_usuario_bootstrap(login: str, nome: str, senha_hash: str):
     conn = conectar()
     try:
-        existente = conn.execute("SELECT * FROM usuarios WHERE origem='ENV' ORDER BY id LIMIT 1").fetchone()
+        existente = conn.execute("SELECT * FROM usuarios WHERE origem='ENV' AND academia_id=? AND unidade_id=? ORDER BY id LIMIT 1", (academia_atual_id(), unidade_atual_id())).fetchone()
         if existente:
             conn.execute(
                 "UPDATE usuarios SET login=?, nome=?, senha_hash=?, papel='ADMIN', ativo=1, data_atualizacao=CURRENT_TIMESTAMP WHERE id=?",
@@ -2344,14 +2688,14 @@ def garantir_usuario_bootstrap(login: str, nome: str, senha_hash: str):
             )
             uid = existente["id"]
         else:
-            por_login = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?)", (login,)).fetchone()
+            por_login = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?) AND academia_id=? AND unidade_id=?", (login, academia_atual_id(), unidade_atual_id())).fetchone()
             if por_login:
                 # Nao sobrescreve uma conta local existente; apenas garante que haja um admin ativo.
                 uid = por_login["id"]
             else:
                 cur = conn.execute(
-                    "INSERT INTO usuarios (login,nome,senha_hash,papel,ativo,origem) VALUES (?,?,?,'ADMIN',1,'ENV')",
-                    (login, nome, senha_hash),
+                    "INSERT INTO usuarios (login,nome,senha_hash,papel,ativo,origem,academia_id,unidade_id) VALUES (?,?,?,'ADMIN',1,'ENV',?,?)",
+                    (login, nome, senha_hash, academia_atual_id(), unidade_atual_id()),
                 )
                 uid = cur.lastrowid
         conn.commit()
@@ -2362,7 +2706,7 @@ def garantir_usuario_bootstrap(login: str, nome: str, senha_hash: str):
 def obter_usuario_por_login(login: str):
     conn = conectar()
     try:
-        row = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?) LIMIT 1", (login,)).fetchone()
+        row = conn.execute("SELECT * FROM usuarios WHERE LOWER(login)=LOWER(?) AND academia_id=? AND unidade_id=? LIMIT 1", (login, academia_atual_id(), unidade_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -2370,7 +2714,7 @@ def obter_usuario_por_login(login: str):
 def obter_usuario(usuario_id: int):
     conn = conectar()
     try:
-        row = conn.execute("SELECT * FROM usuarios WHERE id=?", (usuario_id,)).fetchone()
+        row = conn.execute("SELECT * FROM usuarios WHERE id=? AND academia_id=? AND unidade_id=?", (usuario_id, academia_atual_id(), unidade_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -2378,7 +2722,7 @@ def obter_usuario(usuario_id: int):
 def listar_usuarios():
     conn = conectar()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM usuarios ORDER BY ativo DESC, nome COLLATE NOCASE, id").fetchall()]
+        return [dict(r) for r in conn.execute("SELECT * FROM usuarios WHERE academia_id=? AND unidade_id=? ORDER BY ativo DESC, nome COLLATE NOCASE, id", (academia_atual_id(), unidade_atual_id())).fetchall()]
     finally:
         conn.close()
 
@@ -2386,8 +2730,8 @@ def criar_usuario(login: str, nome: str, senha_hash: str, papel: str, ativo: boo
     conn = conectar()
     try:
         cur = conn.execute(
-            "INSERT INTO usuarios (login,nome,senha_hash,papel,ativo,origem) VALUES (?,?,?,?,?,'LOCAL')",
-            (login, nome, senha_hash, papel, 1 if ativo else 0),
+            "INSERT INTO usuarios (login,nome,senha_hash,papel,ativo,origem,academia_id,unidade_id) VALUES (?,?,?,?,?,'LOCAL',?,?)",
+            (login, nome, senha_hash, papel, 1 if ativo else 0, academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
         return cur.lastrowid
@@ -2398,8 +2742,8 @@ def atualizar_usuario(usuario_id: int, login: str, nome: str, papel: str, ativo:
     conn = conectar()
     try:
         cur = conn.execute(
-            "UPDATE usuarios SET login=?, nome=?, papel=?, ativo=?, data_atualizacao=CURRENT_TIMESTAMP WHERE id=? AND origem<>'ENV'",
-            (login, nome, papel, 1 if ativo else 0, usuario_id),
+            "UPDATE usuarios SET login=?, nome=?, papel=?, ativo=?, data_atualizacao=CURRENT_TIMESTAMP WHERE id=? AND origem<>'ENV' AND academia_id=? AND unidade_id=?",
+            (login, nome, papel, 1 if ativo else 0, usuario_id, academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
         return cur.rowcount > 0
@@ -2410,8 +2754,8 @@ def atualizar_senha_usuario(usuario_id: int, senha_hash: str):
     conn = conectar()
     try:
         cur = conn.execute(
-            "UPDATE usuarios SET senha_hash=?, data_atualizacao=CURRENT_TIMESTAMP WHERE id=? AND origem<>'ENV'",
-            (senha_hash, usuario_id),
+            "UPDATE usuarios SET senha_hash=?, data_atualizacao=CURRENT_TIMESTAMP WHERE id=? AND origem<>'ENV' AND academia_id=? AND unidade_id=?",
+            (senha_hash, usuario_id, academia_atual_id(), unidade_atual_id()),
         )
         conn.commit()
         return cur.rowcount > 0
@@ -2430,9 +2774,9 @@ def contar_admins_ativos(excluir_id=None):
     conn = conectar()
     try:
         if excluir_id is None:
-            row = conn.execute("SELECT COUNT(*) FROM usuarios WHERE papel='ADMIN' AND ativo=1").fetchone()
+            row = conn.execute("SELECT COUNT(*) FROM usuarios WHERE papel='ADMIN' AND ativo=1 AND academia_id=? AND unidade_id=?", (academia_atual_id(), unidade_atual_id())).fetchone()
         else:
-            row = conn.execute("SELECT COUNT(*) FROM usuarios WHERE papel='ADMIN' AND ativo=1 AND id<>?", (excluir_id,)).fetchone()
+            row = conn.execute("SELECT COUNT(*) FROM usuarios WHERE papel='ADMIN' AND ativo=1 AND id<>? AND academia_id=? AND unidade_id=?", (excluir_id, academia_atual_id(), unidade_atual_id())).fetchone()
         return int(row[0])
     finally:
         conn.close()
@@ -2452,8 +2796,9 @@ def listar_professores():
                     WHERE pa.professor_id=pr.id AND pa.ativo=1) AS total_alunos
             FROM professores pr
             LEFT JOIN usuarios u ON u.id=pr.usuario_id
+            WHERE pr.academia_id=? AND pr.unidade_id=?
             ORDER BY pr.ativo DESC, pr.nome COLLATE NOCASE, pr.id
-            """
+            """, (academia_atual_id(), unidade_atual_id())
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -2468,8 +2813,8 @@ def obter_professor(professor_id: int):
             SELECT pr.*, u.login AS usuario_login, u.ativo AS usuario_ativo
             FROM professores pr
             LEFT JOIN usuarios u ON u.id=pr.usuario_id
-            WHERE pr.id=?
-            """, (professor_id,)
+            WHERE pr.id=? AND pr.academia_id=? AND pr.unidade_id=?
+            """, (professor_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -2484,8 +2829,8 @@ def obter_professor_por_usuario(usuario_id: int):
             SELECT pr.*, u.login AS usuario_login, u.ativo AS usuario_ativo
             FROM professores pr
             JOIN usuarios u ON u.id=pr.usuario_id
-            WHERE pr.usuario_id=? LIMIT 1
-            """, (usuario_id,)
+            WHERE pr.usuario_id=? AND pr.academia_id=? AND pr.unidade_id=? LIMIT 1
+            """, (usuario_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -2498,13 +2843,14 @@ def criar_professor(dados: dict):
         cur = conn.execute(
             """
             INSERT INTO professores
-                (usuario_id,nome,cpf,cref,telefone,email,especialidade,foto_path,observacoes,ativo)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                (usuario_id,nome,cpf,cref,telefone,email,especialidade,foto_path,observacoes,ativo,academia_id,unidade_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 dados.get("usuario_id"), dados["nome"], dados.get("cpf"), dados.get("cref"),
                 dados.get("telefone"), dados.get("email"), dados.get("especialidade"),
                 dados.get("foto_path"), dados.get("observacoes"), 1 if dados.get("ativo", True) else 0,
+                academia_atual_id(), unidade_atual_id(),
             ),
         )
         conn.commit()
@@ -2521,13 +2867,13 @@ def atualizar_professor(professor_id: int, dados: dict):
             UPDATE professores SET
                 usuario_id=?, nome=?, cpf=?, cref=?, telefone=?, email=?, especialidade=?,
                 foto_path=?, observacoes=?, ativo=?, data_atualizacao=CURRENT_TIMESTAMP
-            WHERE id=?
+            WHERE id=? AND academia_id=? AND unidade_id=?
             """,
             (
                 dados.get("usuario_id"), dados["nome"], dados.get("cpf"), dados.get("cref"),
                 dados.get("telefone"), dados.get("email"), dados.get("especialidade"),
                 dados.get("foto_path"), dados.get("observacoes"), 1 if dados.get("ativo", True) else 0,
-                professor_id,
+                professor_id, academia_atual_id(), unidade_atual_id(),
             ),
         )
         conn.commit()
@@ -2617,9 +2963,9 @@ def listar_alunos_professor(professor_id: int, somente_ativos=True):
                    (SELECT l.data_hora FROM logs_acesso l WHERE l.pessoa_id=p.id ORDER BY l.id DESC LIMIT 1) AS ultimo_acesso
             FROM professor_alunos pa
             JOIN pessoas p ON p.id=pa.pessoa_id
-            WHERE pa.professor_id=? {filtro}
+            WHERE pa.professor_id=? AND p.academia_id=? AND p.unidade_id=? {filtro}
             ORDER BY p.nome COLLATE NOCASE
-            """, (professor_id,)
+            """, (professor_id, academia_atual_id(), unidade_atual_id())
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -2630,8 +2976,13 @@ def professor_tem_aluno(professor_id: int, pessoa_id: int):
     conn = conectar()
     try:
         return conn.execute(
-            "SELECT 1 FROM professor_alunos WHERE professor_id=? AND pessoa_id=? AND ativo=1",
-            (professor_id,pessoa_id),
+            """SELECT 1 FROM professor_alunos pa
+               JOIN pessoas p ON p.id=pa.pessoa_id
+               JOIN professores pr ON pr.id=pa.professor_id
+               WHERE pa.professor_id=? AND pa.pessoa_id=? AND pa.ativo=1
+                 AND p.academia_id=? AND p.unidade_id=?
+                 AND pr.academia_id=? AND pr.unidade_id=?""",
+            (professor_id,pessoa_id,academia_atual_id(),unidade_atual_id(),academia_atual_id(),unidade_atual_id()),
         ).fetchone() is not None
     finally:
         conn.close()
@@ -2646,8 +2997,10 @@ def listar_professores_aluno(pessoa_id: int):
             FROM professor_alunos pa
             JOIN professores pr ON pr.id=pa.professor_id
             WHERE pa.pessoa_id=? AND pa.ativo=1 AND pr.ativo=1
+              AND pr.academia_id=? AND pr.unidade_id=?
+              AND EXISTS(SELECT 1 FROM pessoas p WHERE p.id=pa.pessoa_id AND p.academia_id=? AND p.unidade_id=?)
             ORDER BY pa.principal DESC,pr.nome COLLATE NOCASE
-            """, (pessoa_id,)
+            """, (pessoa_id,academia_atual_id(),unidade_atual_id(),academia_atual_id(),unidade_atual_id())
         ).fetchall()]
     finally:
         conn.close()
@@ -2665,8 +3018,9 @@ def listar_exercicios():
                    u.login AS criado_por_login
             FROM exercicios e
             LEFT JOIN usuarios u ON u.id=e.criado_por_usuario_id
+            WHERE e.academia_id=?
             ORDER BY e.ativo DESC, e.grupo_muscular COLLATE NOCASE, e.nome COLLATE NOCASE
-            """
+            """, (academia_atual_id(),)
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
@@ -2683,9 +3037,9 @@ def obter_exercicio(exercicio_id: int):
                    u.login AS criado_por_login
             FROM exercicios e
             LEFT JOIN usuarios u ON u.id=e.criado_por_usuario_id
-            WHERE e.id=?
+            WHERE e.id=? AND e.academia_id=?
             """,
-            (exercicio_id,),
+            (exercicio_id, academia_atual_id()),
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -2699,15 +3053,15 @@ def criar_exercicio(dados: dict, usuario_id=None):
             """
             INSERT INTO exercicios
                 (nome,grupo_muscular,equipamento,tipo,dificuldade,instrucoes,
-                 observacoes,imagem_path,video_url,ativo,criado_por_usuario_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                 observacoes,imagem_path,video_url,ativo,criado_por_usuario_id,academia_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 dados["nome"], dados["grupo_muscular"], dados.get("equipamento"),
                 dados.get("tipo") or "FORCA", dados.get("dificuldade"),
                 dados.get("instrucoes"), dados.get("observacoes"),
                 dados.get("imagem_path"), dados.get("video_url"),
-                1 if dados.get("ativo", True) else 0, usuario_id,
+                1 if dados.get("ativo", True) else 0, usuario_id, academia_atual_id(),
             ),
         )
         conn.commit()
@@ -2725,14 +3079,14 @@ def atualizar_exercicio(exercicio_id: int, dados: dict):
                 nome=?, grupo_muscular=?, equipamento=?, tipo=?, dificuldade=?,
                 instrucoes=?, observacoes=?, imagem_path=?, video_url=?, ativo=?,
                 data_atualizacao=CURRENT_TIMESTAMP
-            WHERE id=?
+            WHERE id=? AND academia_id=?
             """,
             (
                 dados["nome"], dados["grupo_muscular"], dados.get("equipamento"),
                 dados.get("tipo") or "FORCA", dados.get("dificuldade"),
                 dados.get("instrucoes"), dados.get("observacoes"),
                 dados.get("imagem_path"), dados.get("video_url"),
-                1 if dados.get("ativo", True) else 0, exercicio_id,
+                1 if dados.get("ativo", True) else 0, exercicio_id, academia_atual_id(),
             ),
         )
         conn.commit()
@@ -2774,9 +3128,10 @@ def listar_fichas_treino(pessoa_id=None):
             JOIN pessoas p ON p.id=f.pessoa_id
             LEFT JOIN professores pr ON pr.id=f.professor_id
         """
-        params = []
+        params = [academia_atual_id(), unidade_atual_id()]
+        sql += " WHERE p.academia_id=? AND p.unidade_id=?"
         if pessoa_id is not None:
-            sql += " WHERE f.pessoa_id=?"
+            sql += " AND f.pessoa_id=?"
             params.append(pessoa_id)
         sql += " ORDER BY f.ativo DESC, f.data_criacao DESC, f.id DESC"
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -2793,8 +3148,8 @@ def obter_ficha_treino(ficha_id: int):
             FROM fichas_treino f
             JOIN pessoas p ON p.id=f.pessoa_id
             LEFT JOIN professores pr ON pr.id=f.professor_id
-            WHERE f.id=?
-            """, (ficha_id,)
+            WHERE f.id=? AND p.academia_id=? AND p.unidade_id=?
+            """, (ficha_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         if not ficha:
             return None
@@ -3030,13 +3385,14 @@ def listar_treinos_disponiveis_para_execucao(pessoa_ids=None):
             JOIN pessoas p ON p.id=f.pessoa_id
             LEFT JOIN professores pr ON pr.id=f.professor_id
         """
-        params = []
+        params = [academia_atual_id(), unidade_atual_id()]
+        sql += " WHERE p.academia_id=? AND p.unidade_id=?"
         if pessoa_ids is not None:
             pessoa_ids = list(pessoa_ids)
             if not pessoa_ids:
                 return []
             marks = ",".join("?" for _ in pessoa_ids)
-            sql += f" WHERE f.pessoa_id IN ({marks})"
+            sql += f" AND f.pessoa_id IN ({marks})"
             params.extend(pessoa_ids)
         sql += " ORDER BY p.nome COLLATE NOCASE, f.id DESC, t.ordem, t.id"
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -3133,8 +3489,8 @@ def obter_sessao_treino(sessao_id: int):
             JOIN fichas_treino f ON f.id=s.ficha_id
             JOIN treinos t ON t.id=s.treino_id
             LEFT JOIN usuarios u ON u.id=s.iniciado_por_usuario_id
-            WHERE s.id=?
-            """, (sessao_id,)
+            WHERE s.id=? AND p.academia_id=? AND p.unidade_id=?
+            """, (sessao_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         if not row:
             return None
@@ -3277,13 +3633,14 @@ def listar_sessoes_treino(pessoa_ids=None, limite=100):
             JOIN fichas_treino f ON f.id=s.ficha_id
             JOIN treinos t ON t.id=s.treino_id
         """
-        params = []
+        params = [academia_atual_id(), unidade_atual_id()]
+        sql += " WHERE p.academia_id=? AND p.unidade_id=?"
         if pessoa_ids is not None:
             pessoa_ids = list(pessoa_ids)
             if not pessoa_ids:
                 return []
             marks = ",".join("?" for _ in pessoa_ids)
-            sql += f" WHERE s.pessoa_id IN ({marks})"
+            sql += f" AND s.pessoa_id IN ({marks})"
             params += pessoa_ids
         sql += " ORDER BY CASE WHEN s.status='EM_ANDAMENTO' THEN 0 ELSE 1 END, s.iniciado_em DESC LIMIT ?"
         params.append(int(limite))
@@ -3352,9 +3709,9 @@ def listar_avaliacoes_fisicas(pessoa_id: int):
             FROM avaliacoes_fisicas a
             JOIN pessoas p ON p.id=a.pessoa_id
             LEFT JOIN professores pr ON pr.id=a.professor_id
-            WHERE a.pessoa_id=?
+            WHERE a.pessoa_id=? AND p.academia_id=? AND p.unidade_id=?
             ORDER BY a.data_avaliacao DESC,a.id DESC
-            """, (pessoa_id,)
+            """, (pessoa_id,academia_atual_id(),unidade_atual_id())
         ).fetchall()]
     finally:
         conn.close()
@@ -3369,8 +3726,8 @@ def obter_avaliacao_fisica(avaliacao_id: int):
             FROM avaliacoes_fisicas a
             JOIN pessoas p ON p.id=a.pessoa_id
             LEFT JOIN professores pr ON pr.id=a.professor_id
-            WHERE a.id=?
-            """, (avaliacao_id,)
+            WHERE a.id=? AND p.academia_id=? AND p.unidade_id=?
+            """, (avaliacao_id,academia_atual_id(),unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -3447,13 +3804,14 @@ def resumo_avaliacoes_alunos(pessoa_ids=None):
                    (SELECT COUNT(*) FROM avaliacoes_fisicas a WHERE a.pessoa_id=p.id) total_avaliacoes
             FROM pessoas p
         """
-        params = []
+        params = [academia_atual_id(), unidade_atual_id()]
+        sql += " WHERE p.academia_id=? AND p.unidade_id=?"
         if pessoa_ids is not None:
             pessoa_ids = list(pessoa_ids)
             if not pessoa_ids:
                 return []
             marks = ",".join("?" for _ in pessoa_ids)
-            sql += f" WHERE p.id IN ({marks})"
+            sql += f" AND p.id IN ({marks})"
             params += pessoa_ids
         sql += " ORDER BY p.nome COLLATE NOCASE"
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -3525,9 +3883,10 @@ def rotacionar_refresh_token_mobile(token_hash: str, novo_token_hash: str,
         row = conn.execute(
             """
             SELECT rt.id,rt.aluno_acesso_id,rt.pessoa_id,rt.expires_at,rt.revoked_at,
-                   aa.ativo AS acesso_ativo
+                   aa.ativo AS acesso_ativo,p.academia_id,p.unidade_id
             FROM mobile_refresh_tokens rt
             JOIN aluno_acessos aa ON aa.id=rt.aluno_acesso_id
+            JOIN pessoas p ON p.id=rt.pessoa_id
             WHERE rt.token_hash=?
             LIMIT 1
             """,
@@ -3562,6 +3921,8 @@ def rotacionar_refresh_token_mobile(token_hash: str, novo_token_hash: str,
         return {
             "aluno_acesso_id": int(row["aluno_acesso_id"]),
             "pessoa_id": int(row["pessoa_id"]),
+            "academia_id": int(row["academia_id"] or 1),
+            "unidade_id": int(row["unidade_id"] or 1),
         }
     except Exception:
         conn.rollback()
@@ -3593,13 +3954,13 @@ def obter_acesso_aluno_api(acesso_id: int, pessoa_id: int):
         row = conn.execute(
             """
             SELECT aa.id,aa.pessoa_id,aa.login,aa.ativo,aa.ultimo_login,
-                   p.nome,p.matricula,p.foto_path
+                   p.nome,p.matricula,p.foto_path,p.academia_id,p.unidade_id
             FROM aluno_acessos aa
             JOIN pessoas p ON p.id=aa.pessoa_id
-            WHERE aa.id=? AND aa.pessoa_id=?
+            WHERE aa.id=? AND aa.pessoa_id=? AND p.academia_id=? AND p.unidade_id=?
             LIMIT 1
             """,
-            (acesso_id, pessoa_id),
+            (acesso_id, pessoa_id, academia_atual_id(), unidade_atual_id()),
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -3613,12 +3974,12 @@ def obter_acesso_aluno_por_login(login: str):
     try:
         row = conn.execute(
             """
-            SELECT aa.*,p.nome,p.matricula,p.foto_path
+            SELECT aa.*,p.nome,p.matricula,p.foto_path,p.academia_id,p.unidade_id
             FROM aluno_acessos aa
             JOIN pessoas p ON p.id=aa.pessoa_id
-            WHERE LOWER(aa.login)=LOWER(?)
+            WHERE LOWER(aa.login)=LOWER(?) AND p.academia_id=? AND p.unidade_id=?
             LIMIT 1
-            """, ((login or "").strip(),)
+            """, ((login or "").strip(), academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -3630,11 +3991,11 @@ def obter_acesso_aluno_por_pessoa(pessoa_id: int):
     try:
         row = conn.execute(
             """
-            SELECT aa.*,p.nome,p.matricula
+            SELECT aa.*,p.nome,p.matricula,p.academia_id,p.unidade_id
             FROM aluno_acessos aa
             JOIN pessoas p ON p.id=aa.pessoa_id
-            WHERE aa.pessoa_id=?
-            """, (pessoa_id,)
+            WHERE aa.pessoa_id=? AND p.academia_id=? AND p.unidade_id=?
+            """, (pessoa_id, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -3647,11 +4008,11 @@ def salvar_acesso_aluno(pessoa_id: int, login: str, senha_hash=None, ativo=True)
         raise ValueError("Informe um login.")
     conn = conectar()
     try:
-        pessoa = conn.execute("SELECT id FROM pessoas WHERE id=?", (pessoa_id,)).fetchone()
+        pessoa = conn.execute("SELECT id FROM pessoas WHERE id=? AND academia_id=? AND unidade_id=?", (pessoa_id, academia_atual_id(), unidade_atual_id())).fetchone()
         if not pessoa:
             raise ValueError("Aluno não encontrado.")
         conflito_equipe = conn.execute(
-            "SELECT id FROM usuarios WHERE LOWER(login)=LOWER(?) LIMIT 1", (login,)
+            "SELECT id FROM usuarios WHERE LOWER(login)=LOWER(?) AND academia_id=? AND unidade_id=? LIMIT 1", (login, academia_atual_id(), unidade_atual_id())
         ).fetchone()
         if conflito_equipe:
             raise ValueError("Este login já pertence a uma conta da equipe.")
@@ -3965,7 +4326,7 @@ def salvar_feedback_mobile(sessao_id: int, pessoa_id: int, percepcao_esforco: in
 # ---------- Agente local / cloud bridge (Schema 21) ----------
 
 def registrar_agente(*, agent_uid: str, nome: str, token_hash: str, machine_id=None, hostname=None,
-                     plataforma=None, app_version=None, capabilities=None, ip=None):
+                     plataforma=None, app_version=None, capabilities=None, ip=None, academia_id=None, unidade_id=None):
     uid = str(agent_uid or "").strip()[:120]
     if not uid:
         raise ValueError("agent_uid obrigatorio.")
@@ -3975,16 +4336,18 @@ def registrar_agente(*, agent_uid: str, nome: str, token_hash: str, machine_id=N
             """
             INSERT INTO agentes_locais(
                 agent_uid,nome,token_hash,machine_id,hostname,plataforma,app_version,
-                capabilities_json,ativo,last_ip,registered_at,token_rotated_at,updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+                capabilities_json,ativo,last_ip,registered_at,token_rotated_at,updated_at,academia_id,unidade_id
+            ) VALUES(?,?,?,?,?,?,?,?,1,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?,?)
             ON CONFLICT(agent_uid) DO UPDATE SET
                 nome=excluded.nome, token_hash=excluded.token_hash, machine_id=excluded.machine_id,
                 hostname=excluded.hostname, plataforma=excluded.plataforma, app_version=excluded.app_version,
                 capabilities_json=excluded.capabilities_json, ativo=1, last_ip=excluded.last_ip,
-                token_rotated_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+                token_rotated_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP,
+                academia_id=excluded.academia_id, unidade_id=excluded.unidade_id
             """,
             (uid, str(nome or uid)[:120], str(token_hash), machine_id, hostname, plataforma, app_version,
-             json.dumps(capabilities or {}, ensure_ascii=False), ip),
+             json.dumps(capabilities or {}, ensure_ascii=False), ip,
+             int(academia_id or academia_atual_id()), int(unidade_id or unidade_atual_id())),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM agentes_locais WHERE agent_uid=?", (uid,)).fetchone()
@@ -4008,7 +4371,7 @@ def obter_agente_por_token_hash(token_hash: str):
 def obter_agente(agent_id: int):
     conn = conectar()
     try:
-        row = conn.execute("SELECT * FROM agentes_locais WHERE id=?", (int(agent_id),)).fetchone()
+        row = conn.execute("SELECT * FROM agentes_locais WHERE id=? AND academia_id=? AND unidade_id=?", (int(agent_id), academia_atual_id(), unidade_atual_id())).fetchone()
         return dict(row) if row else None
     finally:
         conn.close()
@@ -4080,7 +4443,7 @@ def _timestamp_age_seconds(value, now_value) -> int | None:
 def listar_agentes(offline_after_seconds: int = 90):
     conn = conectar()
     try:
-        rows = [dict(r) for r in conn.execute("SELECT * FROM agentes_locais ORDER BY id DESC").fetchall()]
+        rows = [dict(r) for r in conn.execute("SELECT * FROM agentes_locais WHERE academia_id=? AND unidade_id=? ORDER BY id DESC", (academia_atual_id(), unidade_atual_id())).fetchall()]
         agora_row = conn.execute("SELECT CURRENT_TIMESTAMP AS agora").fetchone()
         agora_db = agora_row["agora"] if agora_row else None
     finally:
@@ -4280,7 +4643,7 @@ def registrar_log_evento_agente(payload: dict, occurred_at=None) -> bool:
     conn = conectar()
     try:
         if pessoa_id is not None:
-            existe = conn.execute("SELECT id FROM pessoas WHERE id=?", (pessoa_id,)).fetchone()
+            existe = conn.execute("SELECT id FROM pessoas WHERE id=? AND academia_id=? AND unidade_id=?", (pessoa_id, academia_atual_id(), unidade_atual_id())).fetchone()
             if not existe:
                 # O aluno pode ter sido removido enquanto o agente estava
                 # offline. Preservamos o historico sem violar a FK.
@@ -4288,20 +4651,20 @@ def registrar_log_evento_agente(payload: dict, occurred_at=None) -> bool:
         if data_hora:
             cur = conn.execute(
                 """
-                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,data_hora,catraca_id,catraca_nome)
-                VALUES(?,?,?,?,?,?,?,?,?)
+                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,data_hora,catraca_id,catraca_nome,academia_id,unidade_id)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (pessoa_id, nome, payload.get("cpf"), payload.get("matricula"), status, motivo,
-                 data_hora, payload.get("catraca_id"), payload.get("catraca_nome")),
+                 data_hora, payload.get("catraca_id"), payload.get("catraca_nome"), academia_atual_id(), unidade_atual_id()),
             )
         else:
             cur = conn.execute(
                 """
-                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,catraca_id,catraca_nome)
-                VALUES(?,?,?,?,?,?,?,?)
+                INSERT INTO logs_acesso(pessoa_id,nome,cpf,matricula,status,motivo,catraca_id,catraca_nome,academia_id,unidade_id)
+                VALUES(?,?,?,?,?,?,?,?,?,?)
                 """,
                 (pessoa_id, nome, payload.get("cpf"), payload.get("matricula"), status, motivo,
-                 payload.get("catraca_id"), payload.get("catraca_nome")),
+                 payload.get("catraca_id"), payload.get("catraca_nome"), academia_atual_id(), unidade_atual_id()),
             )
         conn.commit()
         return cur.rowcount > 0

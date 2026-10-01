@@ -1,6 +1,6 @@
 """Aplicacao Flask do Gym OS.
 
-V6.12: storage privado + biometria versionada sincronizada com o agente local,
+V6.13: storage privado + biometria versionada sincronizada com o agente local,
 mantendo SQLite/PostgreSQL e arquivos legados compativeis.
 """
 
@@ -122,10 +122,16 @@ def create_app(settings: Settings | None = None) -> Flask:
             "gym_version": settings.app_version,
             "gym_environment": settings.environment,
             "media_url": storage_service.url_temporaria,
+            "academia_atual": database.obter_academia(database.academia_atual_id()),
+            "unidade_atual": database.obter_unidade(database.unidade_atual_id(), database.academia_atual_id()),
         }
 
     @app.before_request
     def protecoes_globais():
+        database.set_tenant_context(
+            session.get("academia_id") or 1,
+            session.get("unidade_id") or 1,
+        )
         recebido = (request.headers.get("X-Request-ID") or "").strip()
         g.request_id = recebido[:80] if recebido and len(recebido) <= 80 else uuid.uuid4().hex
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## V6.13 — Multiacademia + multiunidade
+
+- Schema atualizado para **23** com `academias` e `unidades`; instalações existentes são absorvidas automaticamente por `principal/principal`.
+- Contexto tenant-aware no backend para isolar alunos, usuários, professores, catracas, Agents, logs, storage e configurações.
+- Planos e exercícios passam a pertencer à academia; novas academias recebem planos padrão e unidade/catraca iniciais.
+- Login web e primeiro acesso aceitam código de academia/unidade.
+- Login mobile envia academia/unidade; access/refresh tokens preservam o tenant durante toda a sessão.
+- Agents passam a registrar `AGENT_ACADEMIA` e `AGENT_UNIDADE`, sincronizando somente a unidade associada.
+- Configurações operacionais usam namespace por academia/unidade para impedir vazamento entre tenants.
+- Migração SQLite → PostgreSQL inclui as entidades V6.13, backfill de dados legados e sequences das novas tabelas.
+- CLI ganha `tenant-status`, `tenant-create-academia`, `tenant-create-unidade` e `tenant-create-admin`.
+- Consultas de fichas, sessões, avaliações e vínculos professor/aluno passam a validar o contexto da unidade nas leituras principais.
+- **4 novos testes** específicos de schema, isolamento, refresh mobile e Agent multiunidade; suíte projetada passa de 59 para **63 testes**.
+
 ## V6.12 — Storage privado + biometria
 
 - Schema atualizado para **22** com `storage_objects` e `biometric_profiles`.

@@ -19,7 +19,7 @@ class DatabaseV610Tests(unittest.TestCase):
             database.DB_PATH = Path(tmp) / "v610.db"
             try:
                 database.criar_tabelas()
-                self.assertEqual(database.SCHEMA_VERSION, 22)
+                self.assertEqual(database.SCHEMA_VERSION, 23)
                 conn = database.conectar()
                 try:
                     row = conn.execute(
@@ -29,7 +29,7 @@ class DatabaseV610Tests(unittest.TestCase):
                     versao = conn.execute(
                         "SELECT valor FROM schema_meta WHERE chave='schema_version'"
                     ).fetchone()[0]
-                    self.assertEqual(versao, "22")
+                    self.assertEqual(versao, "23")
                 finally:
                     conn.close()
             finally:
@@ -93,7 +93,7 @@ class DatabaseV610Tests(unittest.TestCase):
                 database.criar_tabelas()
                 report = inspect_sqlite_source(path)
                 self.assertEqual(report["quick_check"], "ok")
-                self.assertEqual(str(report["schema_version"]), "22")
+                self.assertEqual(str(report["schema_version"]), "23")
                 self.assertIn("pessoas", report["rows"])
             finally:
                 database.DB_PATH = old_path

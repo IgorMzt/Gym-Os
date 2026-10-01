@@ -3,10 +3,10 @@ import { limparTokens, obterRefreshToken, salvarTokens } from '@/storage/tokens'
 import type { LoginResponse, MeResponse } from '@/types/auth';
 import { removerPushDoBackend } from '@/services/notificacoes';
 
-export async function loginAluno(login: string, senha: string) {
+export async function loginAluno(login: string, senha: string, academia = 'principal', unidade = 'principal') {
   const data = await apiPublica<LoginResponse>('/api/v1/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ login, senha }),
+    body: JSON.stringify({ login, senha, academia, unidade }),
   });
   await salvarTokens(data.access_token, data.refresh_token);
   return data;

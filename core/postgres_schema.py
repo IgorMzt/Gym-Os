@@ -16,6 +16,33 @@ def _ts(name: str, *, not_null: bool = False) -> str:
 
 POSTGRES_SCHEMA_STATEMENTS = [
     f"""
+    CREATE TABLE IF NOT EXISTS academias (
+        id BIGSERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        documento TEXT,
+        email TEXT,
+        telefone TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        data_criacao TEXT {TS_DEFAULT},
+        data_atualizacao TEXT {TS_DEFAULT}
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS unidades (
+        id BIGSERIAL PRIMARY KEY,
+        academia_id BIGINT NOT NULL REFERENCES academias(id) ON DELETE CASCADE,
+        nome TEXT NOT NULL,
+        codigo TEXT NOT NULL,
+        endereco TEXT,
+        ativo INTEGER NOT NULL DEFAULT 1,
+        data_criacao TEXT {TS_DEFAULT},
+        data_atualizacao TEXT {TS_DEFAULT},
+        UNIQUE(academia_id,codigo)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_unidades_academia_ativo ON unidades(academia_id,ativo)",
+    f"""
     CREATE TABLE IF NOT EXISTS pessoas (
         id BIGSERIAL PRIMARY KEY,
         nome TEXT NOT NULL,
@@ -64,7 +91,7 @@ POSTGRES_SCHEMA_STATEMENTS = [
     f"""
     CREATE TABLE IF NOT EXISTS planos (
         id BIGSERIAL PRIMARY KEY,
-        nome TEXT NOT NULL UNIQUE,
+        nome TEXT NOT NULL,
         valor_centavos INTEGER NOT NULL DEFAULT 0,
         duracao_dias INTEGER NOT NULL,
         descricao TEXT,
@@ -488,6 +515,33 @@ POSTGRES_SCHEMA_STATEMENTS = [
     GROUP BY p.id,p.foto_path
     ON CONFLICT(pessoa_id) DO NOTHING
     """,
+    # V6.13 — tenant columns em bancos PostgreSQL ja existentes.
+    "ALTER TABLE pessoas ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE pessoas ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE planos ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE professores ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE professores ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE exercicios ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE catracas ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE catracas ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE agentes_locais ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE agentes_locais ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE logs_acesso ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE logs_acesso ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE logs_admin ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE logs_admin ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE storage_objects ADD COLUMN IF NOT EXISTS academia_id BIGINT",
+    "ALTER TABLE storage_objects ADD COLUMN IF NOT EXISTS unidade_id BIGINT",
+    "ALTER TABLE planos DROP CONSTRAINT IF EXISTS planos_nome_key",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_planos_academia_nome ON planos(academia_id,LOWER(nome))",
+    "CREATE INDEX IF NOT EXISTS idx_pessoas_tenant ON pessoas(academia_id,unidade_id,id)",
+    "CREATE INDEX IF NOT EXISTS idx_usuarios_tenant ON usuarios(academia_id,unidade_id,ativo)",
+    "CREATE INDEX IF NOT EXISTS idx_professores_tenant ON professores(academia_id,unidade_id,ativo)",
+    "CREATE INDEX IF NOT EXISTS idx_catracas_tenant ON catracas(academia_id,unidade_id,ativa)",
+    "CREATE INDEX IF NOT EXISTS idx_agentes_tenant ON agentes_locais(academia_id,unidade_id,ativo)",
+    "CREATE INDEX IF NOT EXISTS idx_logs_tenant_data ON logs_acesso(academia_id,unidade_id,data_hora DESC)",
     # Indices historicos.
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_pessoas_cpf ON pessoas(cpf) WHERE cpf IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_pessoas_matricula ON pessoas(matricula) WHERE matricula IS NOT NULL",

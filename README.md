@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.12 adiciona storage privado e versionamento biométrico**, mantendo o Agent local capaz de reconhecer alunos offline com cache mínimo de encodings.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.13 adiciona multiacademia/multiunidade com isolamento de dados**, preservando storage privado, biometria e operação offline do Agent.
 
 ## Visão geral
 
@@ -29,7 +29,7 @@ O projeto começou como um verificador facial para catraca e evoluiu para uma pl
 | Camada | Tecnologia |
 | --- | --- |
 | Backend | Python 3.11 + Flask |
-| Banco | SQLite ou PostgreSQL (schema 22) |
+| Banco | SQLite ou PostgreSQL (schema 23) |
 | Visão computacional | OpenCV + face_recognition + dlib |
 | Frontend | HTML, CSS e JavaScript vanilla |
 | PWA | Web App Manifest + Service Worker |
@@ -191,7 +191,7 @@ python manage.py migrate-sqlite --source perfis.db
 python manage.py db-status
 ```
 
-O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 22, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
+O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 23, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
 
 Para testar um PostgreSQL já configurado também existe:
 
@@ -222,6 +222,28 @@ GET /health        # compatibilidade com o health check anterior
 ```
 
 A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` desaparece quando o papel cloud usa `STORAGE_BACKEND=object` com bucket privado configurado.
+
+
+## Multiacademia e multiunidade — V6.13
+
+O mesmo backend pode hospedar várias academias e unidades com contexto isolado. Bancos existentes são migrados automaticamente para **Academia Principal (`principal`) → Unidade Principal (`principal`)**, sem apagar os dados atuais.
+
+- alunos, usuários, professores, catracas, agentes, logs, storage e configurações passam a respeitar academia/unidade;
+- planos e exercícios são associados à academia;
+- o login web e o app mobile aceitam código da academia e da unidade;
+- tokens mobile carregam o tenant e preservam o contexto também durante o refresh;
+- cada Agent informa `AGENT_ACADEMIA` e `AGENT_UNIDADE` no registro e sincroniza somente sua unidade;
+- configurações operacionais ficam isoladas por academia/unidade, mantendo fallback para valores legados;
+- `python manage.py tenant-status` lista a estrutura atual;
+- `tenant-create-academia`, `tenant-create-unidade` e `tenant-create-admin` permitem preparar novos tenants pelo CLI.
+
+Exemplo:
+
+```powershell
+python manage.py tenant-create-academia --nome "Academia Teste" --codigo teste
+python manage.py tenant-create-admin --academia teste --unidade principal --login admin-teste --senha "troque-esta-senha"
+python manage.py tenant-status
+```
 
 ## Storage e biometria — V6.12
 
@@ -336,7 +358,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V6.12 separa metadados do conteúdo privado, adiciona URLs temporárias, retenção/exclusão e versionamento biométrico para sincronização do Agent. Ainda **não é a release de produção completa**: multiacademia entra na V6.13, administração SaaS na V6.14 e o hardening final permanece para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
+A V6.13 adiciona a base multiacademia/multiunidade e isolamento tenant-aware sobre o storage/biometria da V6.12. Ainda **não é a release de produção comercial completa**: administração SaaS entra na V6.14 e o hardening final permanece para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -348,8 +370,8 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 - V6.9: preparação de produção/cloud;
 - V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL;
 - V6.11: agente local, cache offline, fila e comandos cloud ↔ academia;
-- **V6.12: storage privado/cloud, URLs assinadas, retenção e versionamento/sincronização biométrica**;
-- V6.13: multiacademia/multiunidade;
+- V6.12: storage privado/cloud, URLs assinadas, retenção e versionamento/sincronização biométrica;
+- **V6.13: multiacademia/multiunidade e isolamento de dados**;
 - V6.14: administração SaaS;
 - V6.15: comunicação;
 - V6.16: inteligência/automações;

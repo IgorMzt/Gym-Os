@@ -66,7 +66,7 @@ class Settings:
     log_dir: str
     enable_local_hardware: bool
     agent_api_token: str
-    app_version: str = "6.12"
+    app_version: str = "6.13"
 
     @classmethod
     def from_env(cls) -> "Settings":

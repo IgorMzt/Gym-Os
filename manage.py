@@ -124,10 +124,69 @@ def agent_status() -> int:
     database.criar_tabelas()
     print(json.dumps({
         "ok": True,
-        "version": "6.12",
+        "version": "6.13",
         "agents": database.listar_agentes(),
     }, indent=2, ensure_ascii=False))
     return 0
+
+
+def tenant_status() -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    academias = database.listar_academias()
+    saida = []
+    for academia in academias:
+        saida.append({
+            **academia,
+            "unidades": database.listar_unidades(int(academia["id"])),
+        })
+    print(json.dumps({"ok": True, "schema": database.SCHEMA_VERSION, "academias": saida}, indent=2, ensure_ascii=False))
+    return 0
+
+
+def tenant_create_academia(args) -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    try:
+        academia = database.criar_academia(args.nome, args.codigo)
+        print(json.dumps({"ok": True, "academia": academia, "unidades": database.listar_unidades(academia["id"])}, indent=2, ensure_ascii=False))
+        return 0
+    except Exception as exc:
+        print(f"TENANT ERROR: {exc}")
+        return 1
+
+
+def tenant_create_unidade(args) -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    academia = database.obter_academia_por_slug(args.academia)
+    if not academia:
+        print("TENANT ERROR: academia nao encontrada.")
+        return 1
+    try:
+        unidade = database.criar_unidade(int(academia["id"]), args.nome, args.codigo, endereco=args.endereco)
+        print(json.dumps({"ok": True, "academia": academia, "unidade": unidade}, indent=2, ensure_ascii=False))
+        return 0
+    except Exception as exc:
+        print(f"TENANT ERROR: {exc}")
+        return 1
+
+
+def tenant_create_admin(args) -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    tenant = database.resolver_tenant(args.academia, args.unidade)
+    if not tenant:
+        print("TENANT ERROR: academia/unidade nao encontrada.")
+        return 1
+    database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
+    try:
+        uid = database.criar_usuario(args.login, args.nome or "Administrador", auth_service.hash_senha(args.senha), "ADMIN", True)
+        print(json.dumps({"ok": True, "usuario_id": uid, "academia": tenant["academia"]["slug"], "unidade": tenant["unidade"]["codigo"]}, indent=2, ensure_ascii=False))
+        return 0
+    except Exception as exc:
+        print(f"TENANT ERROR: {exc}")
+        return 1
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="python manage.py")
@@ -137,6 +196,21 @@ def main() -> int:
     sub.add_parser("db-status", help="Testa conexao, schema e integridade do banco.")
     sub.add_parser("agent-status", help="Lista agentes locais e estado de heartbeat.")
     sub.add_parser("storage-status", help="Testa storage privado e mostra contagem de objetos.")
+    sub.add_parser("tenant-status", help="Lista academias e unidades da V6.13.")
+    ta = sub.add_parser("tenant-create-academia", help="Cria uma academia e sua unidade principal.")
+    ta.add_argument("--nome", required=True)
+    ta.add_argument("--codigo", required=True, help="Slug/codigo unico da academia.")
+    tu = sub.add_parser("tenant-create-unidade", help="Cria uma unidade dentro de uma academia.")
+    tu.add_argument("--academia", required=True, help="Codigo/slug da academia.")
+    tu.add_argument("--nome", required=True)
+    tu.add_argument("--codigo", required=True)
+    tu.add_argument("--endereco")
+    tadm = sub.add_parser("tenant-create-admin", help="Cria um administrador em uma academia/unidade.")
+    tadm.add_argument("--academia", required=True)
+    tadm.add_argument("--unidade", default="principal")
+    tadm.add_argument("--login", required=True)
+    tadm.add_argument("--senha", required=True)
+    tadm.add_argument("--nome")
     purge = sub.add_parser("storage-purge", help="Remove objetos privados cuja retencao venceu.")
     purge.add_argument("--dry-run", action="store_true", help="Mostra candidatos sem remover arquivos.")
     legacy = sub.add_parser("storage-migrate-legacy", help="Move uploads publicos legados para storage privado.")
@@ -167,6 +241,14 @@ def main() -> int:
         return storage_purge(args)
     if args.command == "storage-migrate-legacy":
         return storage_migrate_legacy(args)
+    if args.command == "tenant-status":
+        return tenant_status()
+    if args.command == "tenant-create-academia":
+        return tenant_create_academia(args)
+    if args.command == "tenant-create-unidade":
+        return tenant_create_unidade(args)
+    if args.command == "tenant-create-admin":
+        return tenant_create_admin(args)
     return migrate_sqlite(args)
 
 

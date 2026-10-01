@@ -35,6 +35,10 @@ def registrar_ou_rotacionar_agente(dados: dict, ip: str | None = None) -> tuple[
     capacidades = dados.get("capabilities") or {}
     if not isinstance(capacidades, dict):
         capacidades = {}
+    tenant = database.resolver_tenant(dados.get("academia") or "principal", dados.get("unidade") or "principal")
+    if not tenant:
+        raise ValueError("Academia/unidade do agente nao encontrada.")
+    database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
 
     token = emitir_token_agente()
     agente = database.registrar_agente(
@@ -47,6 +51,8 @@ def registrar_ou_rotacionar_agente(dados: dict, ip: str | None = None) -> tuple[
         app_version=app_version,
         capabilities=capacidades,
         ip=ip,
+        academia_id=tenant["academia"]["id"],
+        unidade_id=tenant["unidade"]["id"],
     )
     return agente, token
 
@@ -73,7 +79,9 @@ def heartbeat(agente: dict, dados: dict, ip: str | None = None) -> dict:
     return atualizado or agente
 
 
-def access_snapshot() -> dict:
+def access_snapshot(agente: dict | None = None) -> dict:
+    if agente:
+        database.set_tenant_context(agente.get("academia_id") or 1, agente.get("unidade_id") or 1)
     pessoas = database.listar_pessoas()
     amostras = database.listar_amostras_faciais()
     perfis_biometricos = database.listar_perfis_biometricos()
@@ -124,7 +132,9 @@ def access_snapshot() -> dict:
     }
 
 
-def decisao_acesso_online(pessoa_id: int) -> dict:
+def decisao_acesso_online(pessoa_id: int, agente: dict | None = None) -> dict:
+    if agente:
+        database.set_tenant_context(agente.get("academia_id") or 1, agente.get("unidade_id") or 1)
     pessoa = database.obter_pessoa(int(pessoa_id))
     if not pessoa:
         return {"allowed": False, "reason": "Aluno nao encontrado.", "pessoa": None}
@@ -145,6 +155,7 @@ def decisao_acesso_online(pessoa_id: int) -> dict:
 
 
 def processar_eventos(agente: dict, eventos: list[dict]) -> dict:
+    database.set_tenant_context(agente.get("academia_id") or 1, agente.get("unidade_id") or 1)
     aceitos = 0
     duplicados = 0
     erros = []

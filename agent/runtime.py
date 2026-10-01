@@ -1,4 +1,4 @@
-"""Orquestrador de sincronizacao, fila offline e comandos do agente V6.12."""
+"""Orquestrador de sincronizacao, fila offline e comandos do agente V6.13."""
 
 from __future__ import annotations
 
@@ -28,8 +28,10 @@ def metadata(state: AgentState) -> dict:
         "machine_id": machine_id(),
         "hostname": socket.gethostname()[:160],
         "plataforma": platform.platform()[:80],
-        "app_version": "6.12",
+        "app_version": "6.13",
         "capabilities": {"face_recognition": True, "biometric_cache": True, "turnstile": True, "offline_queue": True},
+        "academia": (os.getenv("AGENT_ACADEMIA") or "principal").strip().lower(),
+        "unidade": (os.getenv("AGENT_UNIDADE") or "principal").strip().lower(),
         "queue_depth": state.queue_depth(),
         "cache_age_seconds": state.cache_age_seconds(),
     }
