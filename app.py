@@ -40,6 +40,7 @@ from routes.usuarios import usuarios_bp
 from routes.saas import saas_bp
 from routes.site import site_bp
 from routes.comunicacao import comunicacao_bp
+from routes.inteligencia import inteligencia_bp
 from routes.api import (
     api_agent_bp,
     api_aluno_bp,
@@ -51,7 +52,7 @@ from routes.api import (
     api_notificacoes_bp,
     api_treinos_bp,
 )
-from services import auth_service, storage_service, saas_service
+from services import auth_service, storage_service, saas_service, security_service
 
 
 def formatar_moeda_centavos(valor):
@@ -174,12 +175,29 @@ def create_app(settings: Settings | None = None) -> Flask:
             return "Token de seguranca invalido.", 403
         return None
 
+    @app.before_request
+    def rate_limit_basico():
+        # Limites por IP reduzem brute force e abuso acidental sem bloquear assets/health.
+        if request.path.startswith('/static/') or request.path.startswith('/health'):
+            return None
+        ip=request.remote_addr or 'unknown'
+        sensivel=request.path in {'/login','/saas/login'} or request.path.startswith('/api/v1/auth')
+        limite=20 if sensivel else 240
+        janela=60
+        if not security_service.allow(f"{ip}:{'auth' if sensivel else 'web'}",limite,janela):
+            try: database.registrar_evento_seguranca('RATE_LIMIT',ip,request.method,request.path,getattr(g,'request_id',None),f'limit={limite}/{janela}s')
+            except Exception: app.logger.warning('Falha ao registrar rate limit',exc_info=True)
+            return jsonify({'sucesso':False,'codigo':'RATE_LIMIT','erro':'Muitas requisicoes. Tente novamente em instantes.'}),429
+        return None
+
     @app.after_request
     def cabecalhos_seguranca(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         response.headers.setdefault("Referrer-Policy", "same-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=(self)")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
         response.headers["X-Request-ID"] = getattr(g, "request_id", uuid.uuid4().hex)
         if request.path.startswith("/api/v1/") or request.path.startswith("/admin/") or session.get("usuario_logado"):
             response.headers.setdefault("Cache-Control", "no-store")
@@ -214,6 +232,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(saas_bp)
     app.register_blueprint(site_bp)
     app.register_blueprint(comunicacao_bp)
+    app.register_blueprint(inteligencia_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(professores_bp)

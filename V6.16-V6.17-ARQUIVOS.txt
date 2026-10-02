@@ -1,0 +1,14 @@
+database.py
+app.py
+core/settings.py
+services/runtime_service.py
+services/intelligence_service.py
+services/security_service.py
+routes/inteligencia.py
+templates/base.html
+templates/inteligencia.html
+tests/test_intelligence_v616.py
+tests/test_hardening_v617.py
+CHANGELOG.md
+README.md
+V6.16-V6.17-ARQUIVOS.txt

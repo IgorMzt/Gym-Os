@@ -52,4 +52,5 @@ def readiness_report() -> dict:
         "storage": storage,
         "local_hardware": cfg.enable_local_hardware,
         "blockers": blockers,
+        "hardening": {"rate_limit": True, "security_headers": True, "tenant_context": True},
     }

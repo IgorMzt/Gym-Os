@@ -13,7 +13,7 @@ class CommunicationV615Tests(unittest.TestCase):
         self.aluno=database.adicionar_pessoa({'nome':'Aluno Com','cpf':'52998224725','matricula':'COM1','plano':plano['nome'],'plano_id':plano['id'],'data_inicio':'2026-10-01','data_vencimento':'2026-11-01','status_financeiro':'EM_DIA','liberado':True},[np.zeros(128)])
     def tearDown(self): database.DATABASE_BACKEND=self.ob; database.DB_PATH=self.op; database.set_tenant_context(1,1); self.tmp.cleanup()
     def test_schema_25(self):
-        self.assertEqual(database.SCHEMA_VERSION,25); c=database.conectar()
+        self.assertGreaterEqual(database.SCHEMA_VERSION,25); c=database.conectar()
         try:
             self.assertIsNotNone(c.execute("SELECT 1 FROM database_migrations WHERE migration_key='schema-25-comunicacao'").fetchone())
             self.assertIsNotNone(c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='notificacoes'").fetchone())

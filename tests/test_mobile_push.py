@@ -1,4 +1,4 @@
-import os
+﻿import os
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -62,7 +62,7 @@ class MobilePushTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_21(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         conn = database.conectar()
         try:
             row = conn.execute(
@@ -97,3 +97,4 @@ class MobilePushTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 27
 IntegrityError = database_backend.integrity_error_types()
 
 # V6.13 — contexto multiacademia. IDs 1/1 sao sempre a academia/unidade
@@ -761,6 +761,29 @@ def _criar_schema_comunicacao_v615(conn):
         )
     """)
 
+
+
+def _criar_schema_inteligencia_hardening_v616_v617(conn):
+    """V6.16/V6.17: insights, regras, execucoes de automacao e eventos de seguranca."""
+    pk = "BIGSERIAL PRIMARY KEY" if is_postgresql() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS inteligencia_regras (
+        id {pk}, academia_id INTEGER NOT NULL, unidade_id INTEGER, codigo TEXT NOT NULL, nome TEXT NOT NULL,
+        tipo TEXT NOT NULL, parametros_json TEXT NOT NULL DEFAULT '{{}}', ativo INTEGER NOT NULL DEFAULT 1,
+        criado_em TEXT DEFAULT CURRENT_TIMESTAMP, atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(academia_id,unidade_id,codigo))""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS inteligencia_insights (
+        id {pk}, academia_id INTEGER NOT NULL, unidade_id INTEGER NOT NULL, pessoa_id INTEGER, regra_codigo TEXT NOT NULL,
+        severidade TEXT NOT NULL DEFAULT 'MEDIA', titulo TEXT NOT NULL, descricao TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ABERTO',
+        score INTEGER NOT NULL DEFAULT 0, dados_json TEXT NOT NULL DEFAULT '{{}}', detectado_em TEXT DEFAULT CURRENT_TIMESTAMP, resolvido_em TEXT)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_insights_tenant_status ON inteligencia_insights(academia_id,unidade_id,status,score)")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS automacao_execucoes (
+        id {pk}, academia_id INTEGER NOT NULL, unidade_id INTEGER NOT NULL, regra_codigo TEXT NOT NULL, pessoa_id INTEGER,
+        acao TEXT NOT NULL, status TEXT NOT NULL, detalhes TEXT, executado_em TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute(f"""CREATE TABLE IF NOT EXISTS security_events (
+        id {pk}, academia_id INTEGER, unidade_id INTEGER, request_id TEXT, ip TEXT, metodo TEXT, caminho TEXT,
+        evento TEXT NOT NULL, detalhes TEXT, criado_em TEXT DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_security_events_data ON security_events(criado_em)")
+
 def _criar_tabelas_postgresql():
     conn = conectar()
     try:
@@ -768,6 +791,7 @@ def _criar_tabelas_postgresql():
             conn.execute(statement)
         _criar_schema_saas_v614(conn)
         _criar_schema_comunicacao_v615(conn)
+        _criar_schema_inteligencia_hardening_v616_v617(conn)
 
         conn.execute(
             "INSERT INTO schema_meta (chave, valor) VALUES ('schema_version', ?) "
@@ -826,6 +850,8 @@ def _criar_tabelas_postgresql():
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-25-comunicacao", "V6.15", "Central de notificacoes, comunicados, preferencias e push."),
         )
+        conn.execute("INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) ON CONFLICT(migration_key) DO NOTHING", ("schema-26-inteligencia", "V6.16", "Insights, risco de evasao e automacoes operacionais."))
+        conn.execute("INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) ON CONFLICT(migration_key) DO NOTHING", ("schema-27-hardening", "V6.17", "Hardening, observabilidade e eventos de seguranca."))
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
     except Exception:
@@ -1464,6 +1490,7 @@ def criar_tabelas():
         )
         _criar_schema_saas_v614(conn)
         _criar_schema_comunicacao_v615(conn)
+        _criar_schema_inteligencia_hardening_v616_v617(conn)
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta (chave, valor) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1492,6 +1519,8 @@ def criar_tabelas():
             "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
             ("schema-25-comunicacao", "V6.15", "Central de notificacoes, comunicados, preferencias e push."),
         )
+        conn.execute("INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) ON CONFLICT(migration_key) DO NOTHING", ("schema-26-inteligencia", "V6.16", "Insights, risco de evasao e automacoes operacionais."))
+        conn.execute("INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) ON CONFLICT(migration_key) DO NOTHING", ("schema-27-hardening", "V6.17", "Hardening, observabilidade e eventos de seguranca."))
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS cobrancas (
@@ -5229,4 +5258,41 @@ def listar_destinatarios_comunicado(comunicado:dict):
         if tipo!='ACADEMIA': sql+=" AND unidade_id=?"; params.append(unidade_atual_id())
         if tipo=='ALUNO': sql+=" AND id=?"; params.append(int(comunicado.get('pessoa_id') or 0))
         return [dict(r) for r in conn.execute(sql,tuple(params)).fetchall()]
+    finally: conn.close()
+
+
+# ---------- Inteligencia e hardening (Schema 26/27) ----------
+def listar_pessoas_inteligencia():
+    conn=conectar()
+    try:
+        return [dict(r) for r in conn.execute("SELECT id,nome,liberado,status_financeiro,data_vencimento FROM pessoas WHERE academia_id=? AND unidade_id=? ORDER BY nome",(academia_atual_id(),unidade_atual_id())).fetchall()]
+    finally: conn.close()
+
+def acessos_pessoa_recentes(pessoa_id:int, limite=100):
+    conn=conectar()
+    try: return [dict(r) for r in conn.execute("SELECT status,data_hora FROM logs_acesso WHERE academia_id=? AND unidade_id=? AND pessoa_id=? ORDER BY id DESC LIMIT ?",(academia_atual_id(),unidade_atual_id(),pessoa_id,int(limite))).fetchall()]
+    finally: conn.close()
+
+def substituir_insights_inteligencia(insights:list[dict]):
+    conn=conectar()
+    try:
+        conn.execute("UPDATE inteligencia_insights SET status='RESOLVIDO',resolvido_em=CURRENT_TIMESTAMP WHERE academia_id=? AND unidade_id=? AND status='ABERTO'",(academia_atual_id(),unidade_atual_id()))
+        for x in insights:
+            conn.execute("INSERT INTO inteligencia_insights(academia_id,unidade_id,pessoa_id,regra_codigo,severidade,titulo,descricao,score,dados_json) VALUES(?,?,?,?,?,?,?,?,?)",(academia_atual_id(),unidade_atual_id(),x.get('pessoa_id'),x['regra_codigo'],x['severidade'],x['titulo'],x['descricao'],int(x.get('score',0)),json.dumps(x.get('dados',{}),ensure_ascii=False)))
+        conn.commit()
+    finally: conn.close()
+
+def listar_insights_inteligencia(limite=100):
+    conn=conectar()
+    try: return [dict(r) for r in conn.execute("SELECT i.*,p.nome AS pessoa_nome FROM inteligencia_insights i LEFT JOIN pessoas p ON p.id=i.pessoa_id WHERE i.academia_id=? AND i.unidade_id=? AND i.status='ABERTO' ORDER BY i.score DESC,i.id DESC LIMIT ?",(academia_atual_id(),unidade_atual_id(),int(limite))).fetchall()]
+    finally: conn.close()
+
+def registrar_execucao_automacao(regra_codigo,pessoa_id,acao,status,detalhes=None):
+    conn=conectar()
+    try: conn.execute("INSERT INTO automacao_execucoes(academia_id,unidade_id,regra_codigo,pessoa_id,acao,status,detalhes) VALUES(?,?,?,?,?,?,?)",(academia_atual_id(),unidade_atual_id(),regra_codigo,pessoa_id,acao,status,detalhes)); conn.commit()
+    finally: conn.close()
+
+def registrar_evento_seguranca(evento,ip=None,metodo=None,caminho=None,request_id=None,detalhes=None):
+    conn=conectar()
+    try: conn.execute("INSERT INTO security_events(academia_id,unidade_id,request_id,ip,metodo,caminho,evento,detalhes) VALUES(?,?,?,?,?,?,?,?)",(academia_atual_id(),unidade_atual_id(),request_id,ip,metodo,caminho,evento,detalhes)); conn.commit()
     finally: conn.close()

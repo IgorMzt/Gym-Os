@@ -1,4 +1,4 @@
-import json
+﻿import json
 import tempfile
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -52,13 +52,13 @@ class AgentV611Tests(unittest.TestCase):
         return agente, token
 
     def test_schema_21_cria_tabelas_do_agente(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         conn = database.conectar()
         try:
             tabelas = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             self.assertTrue({"agentes_locais", "agente_comandos", "agente_eventos"}.issubset(tabelas))
             versao = conn.execute("SELECT valor FROM schema_meta WHERE chave='schema_version'").fetchone()[0]
-            self.assertEqual(versao, "25")
+            self.assertEqual(versao, "27")
         finally:
             conn.close()
 
@@ -177,3 +177,5 @@ class AgentV611Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

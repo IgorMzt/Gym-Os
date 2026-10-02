@@ -1,4 +1,4 @@
-import tempfile
+﻿import tempfile
 import unittest
 from pathlib import Path
 
@@ -42,7 +42,7 @@ class MultiAcademiaV613Tests(unittest.TestCase):
         }, [np.zeros(128)])
 
     def test_schema_23_cria_academia_e_unidade_principal(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         principal = database.obter_academia_por_slug("principal")
         self.assertIsNotNone(principal)
         unidade = database.obter_unidade_por_codigo(principal["id"], "principal")
@@ -53,7 +53,7 @@ class MultiAcademiaV613Tests(unittest.TestCase):
             migracao = conn.execute("SELECT 1 FROM database_migrations WHERE migration_key='schema-23-multiacademia'").fetchone()
         finally:
             conn.close()
-        self.assertEqual(str(versao), "25")
+        self.assertEqual(str(versao), "27")
         self.assertIsNotNone(migracao)
 
     def test_alunos_usuarios_e_configuracoes_sao_isolados(self):
@@ -154,3 +154,5 @@ class MultiAcademiaV613Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

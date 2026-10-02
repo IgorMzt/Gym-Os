@@ -244,3 +244,16 @@
 - Base do agente local em `agent/`, com heartbeat autenticado em `/api/v1/agent/heartbeat`.
 - Schema permanece **19**; V6.9 é arquitetural e não exige migração de dados.
 - 5 testes adicionais para configuração de produção, readiness, storage e agente local.
+
+## V6.16 — Inteligência e Automação
+- Insights explicáveis de inatividade, queda de frequência e risco financeiro.
+- Dashboard de inteligência tenant-aware com score e prioridade.
+- Ações assistidas integradas à central de notificações V6.15.
+- Histórico persistente de execuções de automação.
+
+## V6.17 — Hardening
+- Schema 27 e versão de runtime 6.17.
+- Rate limiting em autenticação e tráfego web/API.
+- Eventos de segurança persistentes e novos headers defensivos.
+- Readiness expõe estado das proteções de hardening.
+- Regressão automatizada para inteligência e proteções de abuso.

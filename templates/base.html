@@ -46,6 +46,7 @@
       {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
       <div class="admin-nav__section">OPERAÇÃO</div>
       <a href="{{ url_for('comunicacao.pagina_comunicacao') }}" class="{{ 'ativo' if request.path.startswith('/comunicacao') else '' }}"><span>✉</span>Comunicação</a>
+      <a href="{{ url_for('inteligencia.pagina') }}" class="{{ 'ativo' if request.path.startswith('/inteligencia') else '' }}"><span>◈</span>Inteligência</a>
       <a href="{{ url_for('operacoes.pagina_catraca') }}" class="{{ 'ativo' if request.path in ['/catraca','/verificacao'] else '' }}"><span>⇥</span>Catraca</a>
       <a href="{{ url_for('operacoes.pagina_historico') }}" class="{{ 'ativo' if request.path == '/historico' else '' }}"><span>↺</span>Histórico</a>
       {% endif %}

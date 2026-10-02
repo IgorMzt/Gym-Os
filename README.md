@@ -418,3 +418,6 @@ python manage.py saas-status
 ## V6.15 — Comunicação
 
 A V6.15 adiciona uma central tenant-aware de comunicados e notificações. Administradores e recepção podem criar, segmentar, agendar e publicar comunicados; o aluno recebe uma caixa persistente no app, com leitura, preferências e push Expo. Eventos de treino e financeiro também passam a gerar notificações persistentes, e professores podem enviar mensagens aos próprios alunos. O schema atual é 25.
+
+### V6.16 / V6.17
+A V6.16 adiciona inteligência operacional explicável para retenção, frequência e risco financeiro, com ações assistidas integradas às notificações. A V6.17 consolida hardening de produção com rate limiting, eventos de segurança, headers defensivos e observabilidade de readiness. Schema atual: 27.

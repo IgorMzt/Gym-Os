@@ -1,4 +1,4 @@
-import os
+﻿import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,14 +46,14 @@ class StorageBiometriaV612Tests(unittest.TestCase):
         return database.adicionar_pessoa(dados, [np.zeros(128), np.ones(128)], None)
 
     def test_schema_22_cria_storage_e_biometria(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         conn = database.conectar()
         try:
             tabelas = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             self.assertIn("storage_objects", tabelas)
             self.assertIn("biometric_profiles", tabelas)
             versao = conn.execute("SELECT valor FROM schema_meta WHERE chave='schema_version'").fetchone()[0]
-            self.assertEqual(versao, "25")
+            self.assertEqual(versao, "27")
             mig = conn.execute(
                 "SELECT 1 FROM database_migrations WHERE migration_key='schema-22-storage-biometria'"
             ).fetchone()
@@ -201,3 +201,5 @@ class StorageBiometriaV612Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

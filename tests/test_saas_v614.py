@@ -1,4 +1,4 @@
-import tempfile
+﻿import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,7 +34,7 @@ class SaaSV614Tests(unittest.TestCase):
         )
 
     def test_schema_24_e_seeds_saas(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         planos = saas_service.listar_planos(publicos=True, ativos=True)
         self.assertEqual([p["slug"] for p in planos], ["start", "pro", "enterprise"])
         self.assertTrue(any(r["codigo"] == "branding" for r in saas_service.listar_recursos()))
@@ -44,7 +44,7 @@ class SaaSV614Tests(unittest.TestCase):
             migracao = conn.execute("SELECT 1 FROM database_migrations WHERE migration_key='schema-24-saas'").fetchone()
         finally:
             conn.close()
-        self.assertEqual(str(versao), "25")
+        self.assertEqual(str(versao), "27")
         self.assertIsNotNone(migracao)
 
     def test_checkout_provisiona_tenant_admin_e_assinatura(self):
@@ -125,3 +125,5 @@ class SaaSV614Tests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

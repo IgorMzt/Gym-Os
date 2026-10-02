@@ -1,4 +1,4 @@
-import tempfile
+﻿import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
@@ -59,7 +59,7 @@ class MobileApiTests(unittest.TestCase):
         return resposta.get_json()
 
     def test_schema_21(self):
-        self.assertEqual(database.SCHEMA_VERSION, 25)
+        self.assertEqual(database.SCHEMA_VERSION, 27)
         conn = database.conectar()
         try:
             row = conn.execute(
@@ -116,3 +116,4 @@ class MobileApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

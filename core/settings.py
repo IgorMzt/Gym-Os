@@ -69,7 +69,7 @@ class Settings:
     saas_admin_user: str
     saas_admin_password: str
     saas_checkout_mode: str
-    app_version: str = "6.15"
+    app_version: str = "6.17"
 
     @classmethod
     def from_env(cls) -> "Settings":
