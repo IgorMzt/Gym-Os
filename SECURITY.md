@@ -77,3 +77,13 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Agents são vinculados a uma unidade no registro. Trocar um PC de unidade exige novo registro/configuração e revisão do token.
 - `AGENT_ACADEMIA` e `AGENT_UNIDADE` são identificadores operacionais, não segredos; o token individual do Agent continua sendo a credencial sensível.
 - Ao criar integrações, relatórios ou webhooks futuros, preserve o tenant derivado do recurso armazenado e não de parâmetros não confiáveis.
+
+
+## V6.14 — isolamento do plano de controle SaaS
+
+- O Super Admin usa sessão e credenciais separadas das contas operacionais das academias.
+- Mutações do painel SaaS usam token CSRF próprio (`_saas_csrf`).
+- Academias suspensas deixam de resolver no login operacional; assinaturas suspensas/canceladas fazem os feature flags pagos retornarem bloqueados.
+- Conteúdo e branding enviados pelo painel utilizam o storage privado da V6.12; imagens não são gravadas diretamente em `/static`.
+- Senhas de administradores criados pelo checkout são persistidas somente como hash.
+- Em produção, `SAAS_ADMIN_PASSWORD` deve ter pelo menos 12 caracteres e não pode permanecer no valor de exemplo.

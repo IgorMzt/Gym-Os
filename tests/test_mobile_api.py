@@ -59,7 +59,7 @@ class MobileApiTests(unittest.TestCase):
         return resposta.get_json()
 
     def test_schema_21(self):
-        self.assertEqual(database.SCHEMA_VERSION, 23)
+        self.assertEqual(database.SCHEMA_VERSION, 24)
         conn = database.conectar()
         try:
             row = conn.execute(

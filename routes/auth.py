@@ -88,6 +88,15 @@ def pagina_login():
     ip = _ip_cliente()
     restante = _login_bloqueado(ip)
 
+    # Permite abrir o login ja contextualizado/brandizado por academia.
+    if request.method == "GET" and request.args.get("academia"):
+        tenant_preview = database.resolver_tenant(
+            (request.args.get("academia") or "principal").strip().lower(),
+            (request.args.get("unidade") or "principal").strip().lower(),
+        )
+        if tenant_preview:
+            database.set_tenant_context(tenant_preview["academia"]["id"], tenant_preview["unidade"]["id"])
+
     if request.method == "POST":
         if restante > 0:
             erro = f"Muitas tentativas. Tente novamente em {restante} segundos."

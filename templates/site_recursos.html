@@ -1,0 +1,6 @@
+{% extends "site_base.html" %}
+{% block titulo %}Recursos · Gym OS{% endblock %}
+{% block conteudo %}
+<section class="page-hero" data-reveal><span class="eyebrow">RECURSOS</span><h1>Uma plataforma, toda a operação.</h1><p>Da recepção ao celular do aluno, com dados centralizados.</p></section>
+<section class="section section--tight"><div class="feature-grid">{% for r in recursos %}<article class="feature-card"><span>{{ r.categoria|upper }}</span><h3>{{ r.nome }}</h3><p>{{ r.descricao }}</p></article>{% endfor %}</div></section>
+{% endblock %}

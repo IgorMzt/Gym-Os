@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#02050a">
+  <title>{% block titulo %}Gym OS — Gestão inteligente para academias{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css', v='6.14') }}">
+  {% block head %}{% endblock %}
+</head>
+<body class="site-body">
+  <div class="site-noise"></div>
+  <div class="site-orb site-orb--one"></div><div class="site-orb site-orb--two"></div>
+  <header class="site-nav">
+    <a class="site-logo" href="{{ url_for('site.home') }}">{% if conteudo is defined and conteudo.site_logo_ref %}<img src="{{ media_url(conteudo.site_logo_ref) }}" alt="Gym OS" style="max-width:130px;max-height:42px;object-fit:contain">{% else %}<span class="site-logo__mark">G</span><span>GYM OS</span>{% endif %}</a>
+    <nav>
+      <a href="{{ url_for('site.home') }}#produto">Produto</a>
+      <a href="{{ url_for('site.recursos') }}">Recursos</a>
+      <a href="{{ url_for('site.planos') }}">Planos</a>
+      <a href="{{ url_for('site.home') }}#faq">FAQ</a>
+    </nav>
+    <div class="site-nav__actions"><a class="site-link" href="{{ url_for('auth.pagina_login') }}">Entrar</a><a class="site-btn site-btn--sm" href="{{ url_for('site.planos') }}">Começar agora</a></div>
+  </header>
+  <main>{% block conteudo %}{% endblock %}</main>
+  <footer class="site-footer"><div><strong>GYM OS</strong><span>Gestão, acesso e experiência em uma só plataforma.</span></div><div><a href="{{ url_for('site.planos') }}">Planos</a><a href="{{ url_for('auth.pagina_login') }}">Entrar</a><a href="{{ url_for('saas.login') }}">SaaS Admin</a></div></footer>
+  <script src="{{ url_for('static', filename='js/site.js', v='6.14') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

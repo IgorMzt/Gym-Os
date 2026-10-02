@@ -1,7 +1,7 @@
 """Aplicacao Flask do Gym OS.
 
-V6.13: storage privado + biometria versionada sincronizada com o agente local,
-mantendo SQLite/PostgreSQL e arquivos legados compativeis.
+V6.14: camada SaaS/comercial, planos e feature flags, checkout e branding,
+mantendo multiacademia, storage privado e SQLite/PostgreSQL compativeis.
 """
 
 from __future__ import annotations
@@ -37,6 +37,8 @@ from routes.professores import professores_bp
 from routes.system import system_bp
 from routes.treinos import treinos_bp
 from routes.usuarios import usuarios_bp
+from routes.saas import saas_bp
+from routes.site import site_bp
 from routes.api import (
     api_agent_bp,
     api_aluno_bp,
@@ -48,7 +50,7 @@ from routes.api import (
     api_notificacoes_bp,
     api_treinos_bp,
 )
-from services import auth_service, storage_service
+from services import auth_service, storage_service, saas_service
 
 
 def formatar_moeda_centavos(valor):
@@ -124,6 +126,9 @@ def create_app(settings: Settings | None = None) -> Flask:
             "media_url": storage_service.url_temporaria,
             "academia_atual": database.obter_academia(database.academia_atual_id()),
             "unidade_atual": database.obter_unidade(database.unidade_atual_id(), database.academia_atual_id()),
+            "branding_atual": saas_service.branding(database.academia_atual_id()),
+            "saas_assinatura": saas_service.assinatura_atual(database.academia_atual_id()),
+            "saas_recurso_habilitado": lambda codigo: saas_service.feature_enabled(database.academia_atual_id(), codigo),
         }
 
     @app.before_request
@@ -134,6 +139,26 @@ def create_app(settings: Settings | None = None) -> Flask:
         )
         recebido = (request.headers.get("X-Request-ID") or "").strip()
         g.request_id = recebido[:80] if recebido and len(recebido) <= 80 else uuid.uuid4().hex
+
+        # V6.14 — feature flags efetivos por assinatura. A academia principal
+        # continua com acesso total para preservar instalacoes legadas.
+        if session.get("usuario_logado"):
+            caminho = request.path
+            regras = [
+                ("agents", caminho == "/agentes" or caminho.startswith("/agentes/") or caminho.startswith("/api/v1/agent")),
+                ("catraca", caminho in {"/catraca", "/verificacao"} or caminho.startswith("/api/catracas") or caminho.startswith("/api/config/catraca")),
+                ("biometria", caminho.startswith("/api/verificacao") or caminho.startswith("/api/presenca")),
+                ("branding", caminho == "/aparencia" or caminho.startswith("/aparencia/")),
+                ("mobile", caminho == "/app" or caminho.startswith("/app/")),
+                ("pix", caminho.startswith("/api/app/financeiro/pix")),
+                ("financeiro", caminho.startswith("/app/financeiro") or caminho.startswith("/api/app/financeiro") or caminho.endswith("/status-financeiro")),
+                ("relatorios", caminho in {"/historico.csv", "/historico.pdf"}),
+            ]
+            for recurso, corresponde in regras:
+                if corresponde and not saas_service.feature_enabled(database.academia_atual_id(), recurso):
+                    if caminho.startswith("/api/"):
+                        return jsonify({"sucesso": False, "codigo": "RECURSO_NAO_INCLUSO", "recurso": recurso}), 403
+                    return "Recurso nao incluido no plano atual.", 403
 
         # A catraca publica precisa continuar POSTando para APIs operacionais locais.
         if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
@@ -185,6 +210,8 @@ def create_app(settings: Settings | None = None) -> Flask:
     # System/media primeiro: health checks e entrega assinada nao dependem do painel.
     app.register_blueprint(system_bp)
     app.register_blueprint(media_bp)
+    app.register_blueprint(saas_bp)
+    app.register_blueprint(site_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(professores_bp)

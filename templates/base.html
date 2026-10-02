@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#101010" id="meta-theme-color">
+  <meta name="theme-color" content="{{ branding_atual.cor_secundaria if branding_atual else '#101010' }}" id="meta-theme-color">
   <meta name="color-scheme" content="light dark">
-  <link rel="icon" type="image/png" sizes="64x64" href="{{ url_for('static', filename='assets/favicon.png') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='assets/favicon.png') }}">
+  {% set favicon_url = media_url(branding_atual.favicon_ref) if branding_atual and branding_atual.favicon_ref else url_for('static', filename='assets/favicon.png') %}
+  <link rel="icon" type="image/png" sizes="64x64" href="{{ favicon_url }}">
+  <link rel="apple-touch-icon" href="{{ favicon_url }}">
   <script>
     (() => {
       const legado = { claro: 'light', sistema: 'system', escuro: 'dark' };
@@ -19,12 +20,12 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css', v='5.9.1') }}">
   {% block head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %} {{ 'admin-shell-active' if session.get('usuario_logado') else 'public-shell' }}">
+<body class="{% block body_class %}{% endblock %} {{ 'admin-shell-active' if session.get('usuario_logado') else 'public-shell' }}" style="--gym-brand-primary:{{ branding_atual.cor_primaria if branding_atual else '#73C7FF' }};--gym-brand-secondary:{{ branding_atual.cor_secundaria if branding_atual else '#07182E' }};--gym-brand-accent:{{ branding_atual.cor_destaque if branding_atual else '#2D8CFF' }}">
 {% if session.get('usuario_logado') %}
   <aside class="admin-sidebar" id="admin-sidebar">
     <a class="admin-brand" href="{{ url_for('professores.pagina_minha_area') if session.get('usuario_papel') == 'PROFESSOR' else url_for('dashboard.pagina_painel') }}">
-      <img src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
-      <span><strong>PANOBIANCO</strong><small>GYM OS</small></span>
+      {% if branding_atual and branding_atual.logo_ref %}<img src="{{ media_url(branding_atual.logo_ref) }}" alt="Logo da academia">{% else %}<img src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">{% endif %}
+      <span><strong>{{ branding_atual.nome_exibicao if branding_atual and branding_atual.nome_exibicao else 'PANOBIANCO' }}</strong><small>GYM OS</small></span>
     </a>
 
     <nav class="admin-nav" aria-label="Navegação do sistema">
@@ -61,6 +62,7 @@
       <div class="admin-nav__section">SISTEMA</div>
       <a href="{{ url_for('usuarios.pagina_usuarios') }}" class="{{ 'ativo' if request.path == '/usuarios' else '' }}"><span>♙</span>Usuários</a>
       <a href="{{ url_for('agentes.pagina_agentes') }}" class="{{ 'ativo' if request.path.startswith('/agentes') else '' }}"><span>⌘</span>Agentes locais</a>
+      {% if saas_recurso_habilitado('branding') %}<a href="{{ url_for('site.aparencia') }}" class="{{ 'ativo' if request.path == '/aparencia' else '' }}"><span>✦</span>Aparência</a>{% endif %}
       <a href="{{ url_for('operacoes.pagina_configuracoes') }}" class="{{ 'ativo' if request.path == '/configuracoes' else '' }}"><span>⚙</span>Configurações</a>
       <a href="{{ url_for('operacoes.pagina_diagnostico') }}" class="{{ 'ativo' if request.path == '/diagnostico' else '' }}"><span>◇</span>Diagnóstico</a>
       {% endif %}
@@ -68,8 +70,8 @@
 
     <div class="admin-sidebar__future">
       <span>PRÓXIMO MÓDULO</span>
-      <strong>Multiacademia · V6.13</strong>
-      <small>Academias, unidades e isolamento de dados no mesmo cloud.</small>
+      <strong>SaaS · V6.14</strong>
+      <small>Planos, assinaturas, branding e aquisição comercial.</small>
     </div>
 
     <div class="admin-sidebar__footer">
@@ -104,8 +106,8 @@
 {% else %}
   <header class="topbar">
     <a class="brand" href="{{ url_for('operacoes.pagina_catraca') }}">
-      <img class="brand-mark-img" src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">
-      <span><strong>PANOBIANCO</strong><small>CONTROLE DE ACESSO</small></span>
+      {% if branding_atual and branding_atual.logo_ref %}<img class="brand-mark-img" src="{{ media_url(branding_atual.logo_ref) }}" alt="">{% else %}<img class="brand-mark-img" src="{{ url_for('static', filename='assets/panobianco-mark-laranja.png') }}" alt="">{% endif %}
+      <span><strong>{{ branding_atual.nome_exibicao if branding_atual and branding_atual.nome_exibicao else 'PANOBIANCO' }}</strong><small>CONTROLE DE ACESSO</small></span>
     </a>
     <div class="topbar-right">
       <div class="theme-switcher" role="group" aria-label="Modo de tela">

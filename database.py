@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 IntegrityError = database_backend.integrity_error_types()
 
 # V6.13 — contexto multiacademia. IDs 1/1 sao sempre a academia/unidade
@@ -377,11 +377,361 @@ def _sincronizar_sequences_postgresql(conn=None):
             conn.close()
 
 
+
+
+def _criar_schema_saas_v614(conn):
+    """Schema SaaS/comercial da V6.14, compativel com SQLite e PostgreSQL."""
+    if is_postgresql():
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS saas_planos (
+                id BIGSERIAL PRIMARY KEY,
+                nome TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                descricao TEXT,
+                preco_mensal_centavos INTEGER NOT NULL DEFAULT 0,
+                preco_anual_centavos INTEGER NOT NULL DEFAULT 0,
+                trial_dias INTEGER NOT NULL DEFAULT 0,
+                max_alunos INTEGER,
+                max_unidades INTEGER,
+                max_professores INTEGER,
+                max_agentes INTEGER,
+                destaque INTEGER NOT NULL DEFAULT 0,
+                publico INTEGER NOT NULL DEFAULT 1,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                ordem INTEGER NOT NULL DEFAULT 0,
+                data_criacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')),
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_recursos (
+                codigo TEXT PRIMARY KEY,
+                nome TEXT NOT NULL,
+                descricao TEXT,
+                categoria TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_plano_recursos (
+                plano_id BIGINT NOT NULL REFERENCES saas_planos(id) ON DELETE CASCADE,
+                recurso_codigo TEXT NOT NULL REFERENCES saas_recursos(codigo) ON DELETE CASCADE,
+                habilitado INTEGER NOT NULL DEFAULT 1,
+                limite INTEGER,
+                PRIMARY KEY (plano_id,recurso_codigo)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_assinaturas (
+                id BIGSERIAL PRIMARY KEY,
+                academia_id BIGINT NOT NULL REFERENCES academias(id) ON DELETE CASCADE,
+                plano_id BIGINT NOT NULL REFERENCES saas_planos(id) ON DELETE RESTRICT,
+                status TEXT NOT NULL DEFAULT 'ATIVA',
+                ciclo TEXT NOT NULL DEFAULT 'MENSAL',
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                inicio_em TEXT,
+                trial_fim_em TEXT,
+                renovacao_em TEXT,
+                cancelada_em TEXT,
+                gateway TEXT,
+                gateway_subscription_id TEXT,
+                motivo TEXT,
+                data_criacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')),
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_saas_assinaturas_academia ON saas_assinaturas(academia_id,id DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_saas_assinaturas_status ON saas_assinaturas(status,id DESC)",
+            """
+            CREATE TABLE IF NOT EXISTS saas_cupons (
+                id BIGSERIAL PRIMARY KEY,
+                codigo TEXT NOT NULL UNIQUE,
+                tipo TEXT NOT NULL DEFAULT 'PERCENTUAL',
+                valor INTEGER NOT NULL DEFAULT 0,
+                plano_id BIGINT REFERENCES saas_planos(id) ON DELETE SET NULL,
+                max_usos INTEGER,
+                usos INTEGER NOT NULL DEFAULT 0,
+                valido_ate TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                data_criacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')),
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_site_conteudo (
+                chave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'texto',
+                publicado INTEGER NOT NULL DEFAULT 1,
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS academia_branding (
+                academia_id BIGINT PRIMARY KEY REFERENCES academias(id) ON DELETE CASCADE,
+                nome_exibicao TEXT,
+                logo_ref TEXT,
+                favicon_ref TEXT,
+                banner_ref TEXT,
+                login_background_ref TEXT,
+                cor_primaria TEXT NOT NULL DEFAULT '#73C7FF',
+                cor_secundaria TEXT NOT NULL DEFAULT '#07182E',
+                cor_destaque TEXT NOT NULL DEFAULT '#2D8CFF',
+                tema TEXT NOT NULL DEFAULT 'dark',
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_checkouts (
+                id BIGSERIAL PRIMARY KEY,
+                token TEXT NOT NULL UNIQUE,
+                plano_id BIGINT NOT NULL REFERENCES saas_planos(id) ON DELETE RESTRICT,
+                ciclo TEXT NOT NULL DEFAULT 'MENSAL',
+                status TEXT NOT NULL DEFAULT 'PENDENTE',
+                academia_nome TEXT NOT NULL,
+                academia_slug TEXT NOT NULL,
+                admin_nome TEXT NOT NULL,
+                admin_login TEXT NOT NULL,
+                admin_email TEXT NOT NULL,
+                admin_senha_hash TEXT NOT NULL,
+                telefone TEXT,
+                documento TEXT,
+                cupom_codigo TEXT,
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                academia_id BIGINT REFERENCES academias(id) ON DELETE SET NULL,
+                data_criacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS')),
+                data_atualizacao TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_auditoria (
+                id BIGSERIAL PRIMARY KEY,
+                acao TEXT NOT NULL,
+                alvo TEXT,
+                detalhes TEXT,
+                ip TEXT,
+                data_hora TEXT DEFAULT (to_char(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS'))
+            )
+            """,
+        ]
+    else:
+        statements = [
+            """
+            CREATE TABLE IF NOT EXISTS saas_planos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                descricao TEXT,
+                preco_mensal_centavos INTEGER NOT NULL DEFAULT 0,
+                preco_anual_centavos INTEGER NOT NULL DEFAULT 0,
+                trial_dias INTEGER NOT NULL DEFAULT 0,
+                max_alunos INTEGER,
+                max_unidades INTEGER,
+                max_professores INTEGER,
+                max_agentes INTEGER,
+                destaque INTEGER NOT NULL DEFAULT 0,
+                publico INTEGER NOT NULL DEFAULT 1,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                ordem INTEGER NOT NULL DEFAULT 0,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_recursos (
+                codigo TEXT PRIMARY KEY,
+                nome TEXT NOT NULL,
+                descricao TEXT,
+                categoria TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_plano_recursos (
+                plano_id INTEGER NOT NULL,
+                recurso_codigo TEXT NOT NULL,
+                habilitado INTEGER NOT NULL DEFAULT 1,
+                limite INTEGER,
+                PRIMARY KEY (plano_id,recurso_codigo),
+                FOREIGN KEY (plano_id) REFERENCES saas_planos(id) ON DELETE CASCADE,
+                FOREIGN KEY (recurso_codigo) REFERENCES saas_recursos(codigo) ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_assinaturas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                academia_id INTEGER NOT NULL,
+                plano_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'ATIVA',
+                ciclo TEXT NOT NULL DEFAULT 'MENSAL',
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                inicio_em TEXT,
+                trial_fim_em TEXT,
+                renovacao_em TEXT,
+                cancelada_em TEXT,
+                gateway TEXT,
+                gateway_subscription_id TEXT,
+                motivo TEXT,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (academia_id) REFERENCES academias(id) ON DELETE CASCADE,
+                FOREIGN KEY (plano_id) REFERENCES saas_planos(id) ON DELETE RESTRICT
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS idx_saas_assinaturas_academia ON saas_assinaturas(academia_id,id DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_saas_assinaturas_status ON saas_assinaturas(status,id DESC)",
+            """
+            CREATE TABLE IF NOT EXISTS saas_cupons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codigo TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                tipo TEXT NOT NULL DEFAULT 'PERCENTUAL',
+                valor INTEGER NOT NULL DEFAULT 0,
+                plano_id INTEGER,
+                max_usos INTEGER,
+                usos INTEGER NOT NULL DEFAULT 0,
+                valido_ate TEXT,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (plano_id) REFERENCES saas_planos(id) ON DELETE SET NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_site_conteudo (
+                chave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'texto',
+                publicado INTEGER NOT NULL DEFAULT 1,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS academia_branding (
+                academia_id INTEGER PRIMARY KEY,
+                nome_exibicao TEXT,
+                logo_ref TEXT,
+                favicon_ref TEXT,
+                banner_ref TEXT,
+                login_background_ref TEXT,
+                cor_primaria TEXT NOT NULL DEFAULT '#73C7FF',
+                cor_secundaria TEXT NOT NULL DEFAULT '#07182E',
+                cor_destaque TEXT NOT NULL DEFAULT '#2D8CFF',
+                tema TEXT NOT NULL DEFAULT 'dark',
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (academia_id) REFERENCES academias(id) ON DELETE CASCADE
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_checkouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL UNIQUE,
+                plano_id INTEGER NOT NULL,
+                ciclo TEXT NOT NULL DEFAULT 'MENSAL',
+                status TEXT NOT NULL DEFAULT 'PENDENTE',
+                academia_nome TEXT NOT NULL,
+                academia_slug TEXT NOT NULL,
+                admin_nome TEXT NOT NULL,
+                admin_login TEXT NOT NULL,
+                admin_email TEXT NOT NULL,
+                admin_senha_hash TEXT NOT NULL,
+                telefone TEXT,
+                documento TEXT,
+                cupom_codigo TEXT,
+                valor_centavos INTEGER NOT NULL DEFAULT 0,
+                academia_id INTEGER,
+                data_criacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                data_atualizacao TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (plano_id) REFERENCES saas_planos(id) ON DELETE RESTRICT,
+                FOREIGN KEY (academia_id) REFERENCES academias(id) ON DELETE SET NULL
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS saas_auditoria (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                acao TEXT NOT NULL,
+                alvo TEXT,
+                detalhes TEXT,
+                ip TEXT,
+                data_hora TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """,
+        ]
+    for statement in statements:
+        conn.execute(statement)
+
+    recursos = [
+        ("financeiro", "Financeiro", "Cobrancas, pagamentos e indicadores financeiros.", "Operacao"),
+        ("pix", "PIX", "Cobrancas e confirmacoes via PIX.", "Financeiro"),
+        ("mobile", "App mobile", "Aplicativo do aluno e APIs mobile.", "Experiencia"),
+        ("catraca", "Catraca", "Controle de acesso e dispositivos de entrada.", "Acesso"),
+        ("biometria", "Biometria", "Reconhecimento facial e sincronizacao biometrica.", "Acesso"),
+        ("relatorios", "Relatorios", "Dashboards e relatorios avancados.", "Gestao"),
+        ("multiunidade", "Multiunidade", "Mais de uma unidade por academia.", "Gestao"),
+        ("branding", "Branding", "Cores, logos, banners e identidade visual.", "Personalizacao"),
+        ("agents", "Agents", "Agentes locais para hardware e modo offline.", "Infraestrutura"),
+    ]
+    for codigo, nome, descricao, categoria in recursos:
+        conn.execute(
+            "INSERT INTO saas_recursos(codigo,nome,descricao,categoria,ativo) VALUES(?,?,?,?,1) ON CONFLICT(codigo) DO NOTHING",
+            (codigo, nome, descricao, categoria),
+        )
+
+    planos = [
+        ("Start", "start", "Essencial para academias pequenas.", 9900, 99000, 7, 300, 1, 8, 1, 0, 1, 1, 10),
+        ("Pro", "pro", "Automacao, biometria e mais capacidade.", 22900, 229000, 14, 1000, 3, 50, 5, 1, 1, 1, 20),
+        ("Enterprise", "enterprise", "Escala, multiunidade e white label.", 49900, 499000, 14, None, None, None, None, 0, 1, 1, 30),
+    ]
+    for row in planos:
+        conn.execute(
+            """
+            INSERT INTO saas_planos(nome,slug,descricao,preco_mensal_centavos,preco_anual_centavos,trial_dias,
+                max_alunos,max_unidades,max_professores,max_agentes,destaque,publico,ativo,ordem)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(slug) DO NOTHING
+            """,
+            row,
+        )
+
+    mapa = {
+        "start": {"financeiro", "mobile", "relatorios"},
+        "pro": {"financeiro", "pix", "mobile", "catraca", "biometria", "relatorios", "multiunidade", "agents", "branding"},
+        "enterprise": {r[0] for r in recursos},
+    }
+    for slug, habilitados in mapa.items():
+        plano = conn.execute("SELECT id FROM saas_planos WHERE slug=?", (slug,)).fetchone()
+        if not plano:
+            continue
+        for codigo, *_ in recursos:
+            conn.execute(
+                "INSERT INTO saas_plano_recursos(plano_id,recurso_codigo,habilitado) VALUES(?,?,?) "
+                "ON CONFLICT(plano_id,recurso_codigo) DO NOTHING",
+                (int(plano["id"]), codigo, 1 if codigo in habilitados else 0),
+            )
+
+    conteudo = {
+        "hero_titulo": "Gestao de academias, reimaginada.",
+        "hero_subtitulo": "Alunos, treinos, financeiro, acesso e automacao em uma unica plataforma.",
+        "hero_cta": "Comecar agora",
+        "recursos_titulo": "Tudo o que sua academia precisa.",
+        "planos_titulo": "Planos para cada fase.",
+        "faq_titulo": "Perguntas frequentes",
+        "contato_email": "contato@gymos.local",
+        "contato_whatsapp": "",
+        "hero_image_ref": "",
+        "site_logo_ref": "",
+    }
+    for chave, valor in conteudo.items():
+        conn.execute(
+            "INSERT INTO saas_site_conteudo(chave,valor,tipo,publicado) VALUES(?,?, 'texto',1) ON CONFLICT(chave) DO NOTHING",
+            (chave, valor),
+        )
+
 def _criar_tabelas_postgresql():
     conn = conectar()
     try:
         for statement in POSTGRES_SCHEMA_STATEMENTS:
             conn.execute(statement)
+        _criar_schema_saas_v614(conn)
 
         conn.execute(
             "INSERT INTO schema_meta (chave, valor) VALUES ('schema_version', ?) "
@@ -429,6 +779,11 @@ def _criar_tabelas_postgresql():
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-23-multiacademia", "V6.13", "Academias, unidades e isolamento tenant-aware."),
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-24-saas", "V6.14", "Administracao SaaS, planos, assinatura, CMS, checkout e branding."),
         )
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
@@ -1066,6 +1421,7 @@ def criar_tabelas():
             )
             """
         )
+        _criar_schema_saas_v614(conn)
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta (chave, valor) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1085,6 +1441,10 @@ def criar_tabelas():
         conn.execute(
             "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
             ("schema-23-multiacademia", "V6.13", "Academias, unidades e isolamento tenant-aware."),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-24-saas", "V6.14", "Administracao SaaS, planos, assinatura, CMS, checkout e branding."),
         )
         conn.execute(
             """
@@ -1301,6 +1661,43 @@ def criar_tabelas():
 
 
 
+# ---------- Limites SaaS (Schema 24) ----------
+
+def _validar_limite_saas(academia_id: int, campo: str, tabela: str, *, where_extra: str = "", params_extra=()):
+    academia_id = int(academia_id or 1)
+    if academia_id == 1:
+        return
+    permitido = {"max_alunos", "max_unidades", "max_professores", "max_agentes"}
+    if campo not in permitido:
+        return
+    conn = conectar()
+    try:
+        assinatura = conn.execute(
+            f"""SELECT p.{campo} limite,s.status FROM saas_assinaturas s
+                JOIN saas_planos p ON p.id=s.plano_id
+                WHERE s.academia_id=? ORDER BY s.id DESC LIMIT 1""",
+            (academia_id,),
+        ).fetchone()
+        # Tenants criados antes da V6.14 ou manualmente continuam em modo legado
+        # (sem limites) ate receberem uma assinatura SaaS pelo Super Admin.
+        if not assinatura:
+            return
+        if str(assinatura["status"]).upper() not in {"ATIVA", "TRIAL"}:
+            raise ValueError("Assinatura SaaS sem acesso operacional.")
+        limite = assinatura["limite"]
+        if limite is None:
+            return
+        sql = f"SELECT COUNT(*) qtd FROM {tabela} WHERE academia_id=?"
+        params = [academia_id]
+        if where_extra:
+            sql += " AND " + where_extra
+            params.extend(params_extra)
+        atual = int(conn.execute(sql, params).fetchone()["qtd"] or 0)
+        if atual >= int(limite):
+            raise ValueError(f"Limite do plano atingido para {campo.replace('max_','')} ({limite}).")
+    finally:
+        conn.close()
+
 # ---------- Multiacademia / unidades (Schema 23) ----------
 
 def listar_academias(apenas_ativas: bool = False) -> list[dict]:
@@ -1420,6 +1817,7 @@ def criar_unidade(academia_id: int, nome: str, codigo: str, *, endereco=None) ->
         raise ValueError("Nome e codigo da unidade sao obrigatorios.")
     if not all(c.isalnum() or c in "-_" for c in codigo):
         raise ValueError("Codigo da unidade invalido.")
+    _validar_limite_saas(int(academia_id), "max_unidades", "unidades", where_extra="ativo=1")
     conn = conectar()
     try:
         cur = conn.execute(
@@ -1496,6 +1894,7 @@ def adicionar_pessoa(dados, encodings=None, foto_path=None, liberado=True):
     if not encodings:
         raise ValueError("Ao menos uma amostra facial e necessaria.")
 
+    _validar_limite_saas(academia_atual_id(), "max_alunos", "pessoas")
     conn = conectar()
     try:
         primeiro_encoding = _encoding_para_json(encodings[0])
@@ -2844,6 +3243,7 @@ def obter_professor_por_usuario(usuario_id: int):
 
 
 def criar_professor(dados: dict):
+    _validar_limite_saas(academia_atual_id(), "max_professores", "professores", where_extra="ativo=1")
     conn = conectar()
     try:
         cur = conn.execute(
@@ -4336,6 +4736,14 @@ def registrar_agente(*, agent_uid: str, nome: str, token_hash: str, machine_id=N
     uid = str(agent_uid or "").strip()[:120]
     if not uid:
         raise ValueError("agent_uid obrigatorio.")
+    _aid = int(academia_id or academia_atual_id())
+    _check = conectar()
+    try:
+        _existing = _check.execute("SELECT 1 FROM agentes_locais WHERE agent_uid=?", (uid,)).fetchone()
+    finally:
+        _check.close()
+    if not _existing:
+        _validar_limite_saas(_aid, "max_agentes", "agentes_locais", where_extra="ativo=1")
     conn = conectar()
     try:
         conn.execute(

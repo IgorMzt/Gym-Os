@@ -2,7 +2,7 @@
 
 Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.13 adiciona multiacademia/multiunidade com isolamento de dados**, preservando storage privado, biometria e operação offline do Agent.
+> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.14 adiciona a camada SaaS completa**, com Super Admin, portal comercial, contratação, planos/feature flags e branding por academia, preservando multiacademia, storage privado, biometria e Agent.
 
 ## Visão geral
 
@@ -358,7 +358,7 @@ Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
 
 ## Limitações da versão atual
 
-A V6.13 adiciona a base multiacademia/multiunidade e isolamento tenant-aware sobre o storage/biometria da V6.12. Ainda **não é a release de produção comercial completa**: administração SaaS entra na V6.14 e o hardening final permanece para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
+A V6.14 adiciona a camada comercial/SaaS sobre a base multiacademia da V6.13. O produto já possui administração de clientes, planos, assinaturas, portal comercial, aquisição e branding; o hardening final permanece planejado para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
 
 A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
 
@@ -372,6 +372,7 @@ A prova de vida atual é heurística e **não substitui um mecanismo dedicado de
 - V6.11: agente local, cache offline, fila e comandos cloud ↔ academia;
 - V6.12: storage privado/cloud, URLs assinadas, retenção e versionamento/sincronização biométrica;
 - **V6.13: multiacademia/multiunidade e isolamento de dados**;
+- **V6.14: administração SaaS, site comercial, checkout, planos, feature flags e white label**;
 - V6.14: administração SaaS;
 - V6.15: comunicação;
 - V6.16: inteligência/automações;
@@ -385,3 +386,30 @@ O repositório contém assets com identidade Panobianco. Antes de tornar o proje
 ## Licença
 
 Nenhuma licença de código aberto foi definida neste repositório. Se a intenção for torná-lo público e permitir reutilização por terceiros, escolha uma licença antes da publicação.
+
+
+## V6.14 — SaaS completo
+
+A V6.14 adiciona a camada comercial e de administração do Gym OS:
+
+- **Site comercial:** `http://127.0.0.1:5000/site`
+- **Super Admin:** `http://127.0.0.1:5000/saas/login`
+- **Aparência da academia:** `/aparencia` (plano com recurso `branding`)
+- **Planos/feature flags:** configurados pelo Super Admin e validados no backend.
+- **Checkout sandbox:** cria academia, Unidade Principal, primeiro ADMIN e assinatura automaticamente.
+
+Variáveis adicionais:
+
+```env
+SAAS_ADMIN_USER=superadmin
+SAAS_ADMIN_PASSWORD=troque-por-uma-senha-forte-de-12-ou-mais-caracteres
+SAAS_CHECKOUT_MODE=sandbox
+```
+
+`SAAS_CHECKOUT_MODE=sandbox` não realiza cobrança real; ele serve para desenvolvimento e provisiona a contratação imediatamente. `manual` deixa o checkout aguardando aprovação no Super Admin e `disabled` bloqueia novas contratações.
+
+Para conferir o estado SaaS via CLI:
+
+```bash
+python manage.py saas-status
+```

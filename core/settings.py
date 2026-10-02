@@ -66,7 +66,10 @@ class Settings:
     log_dir: str
     enable_local_hardware: bool
     agent_api_token: str
-    app_version: str = "6.13"
+    saas_admin_user: str
+    saas_admin_password: str
+    saas_checkout_mode: str
+    app_version: str = "6.14"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -104,6 +107,9 @@ class Settings:
             log_dir=(os.getenv("LOG_DIR") or "").strip(),
             enable_local_hardware=_bool_env("ENABLE_LOCAL_HARDWARE", local_default),
             agent_api_token=(os.getenv("AGENT_API_TOKEN") or "").strip(),
+            saas_admin_user=(os.getenv("SAAS_ADMIN_USER") or "superadmin").strip(),
+            saas_admin_password=(os.getenv("SAAS_ADMIN_PASSWORD") or "TroqueEstaSenha!").strip(),
+            saas_checkout_mode=(os.getenv("SAAS_CHECKOUT_MODE") or "sandbox").strip().lower(),
         )
 
     @property
@@ -133,6 +139,8 @@ class Settings:
             raise ValueError("APP_TIMEZONE invalida.")
         if self.log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ValueError("LOG_LEVEL invalido.")
+        if self.saas_checkout_mode not in {"sandbox", "manual", "disabled"}:
+            raise ValueError("SAAS_CHECKOUT_MODE deve ser sandbox, manual ou disabled.")
 
         if self.production:
             if len(self.secret_key) < 32 or self.secret_key == "troque-esta-secret-key-em-producao":
@@ -147,6 +155,8 @@ class Settings:
                 raise ValueError("ENABLE_LOCAL_HARDWARE deve ser 0 quando APP_ROLE=cloud.")
             if self.cloud and len(self.agent_api_token) < 32:
                 raise ValueError("AGENT_API_TOKEN deve ter pelo menos 32 caracteres no backend cloud de producao.")
+            if len(self.saas_admin_password) < 12 or self.saas_admin_password == "TroqueEstaSenha!":
+                raise ValueError("SAAS_ADMIN_PASSWORD insegura para producao; use pelo menos 12 caracteres.")
 
     def readiness_blockers(self) -> list[str]:
         """Pendencias arquiteturais que impedem considerar o papel cloud pronto."""

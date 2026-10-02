@@ -1,0 +1,3 @@
+{% extends "site_base.html" %}
+{% block titulo %}Conta criada · Gym OS{% endblock %}
+{% block conteudo %}<section class="success-page" data-reveal><div class="success-icon">✓</div><span class="eyebrow">TUDO PRONTO</span><h1>Sua academia foi criada.</h1><p>Academia <strong>{{ checkout.academia_nome }}</strong> provisionada com o plano {{ checkout.plano_nome }}.</p><div class="success-access"><span>Código da academia</span><b>{{ checkout.academia_slug }}</b><span>Unidade inicial</span><b>principal</b></div><a class="site-btn" href="{{ url_for('auth.pagina_login', academia=checkout.academia_slug, unidade='principal') }}">Ir para o login</a></section>{% endblock %}

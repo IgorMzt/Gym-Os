@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from flask import Blueprint, current_app, g, jsonify
 
 import database
+from services import saas_service
 from services.payments import AsaasGateway, GatewayError
 from .common import aluno_token_obrigatorio, resposta_erro
 
@@ -66,6 +67,8 @@ def _resumo_financeiro(pessoa):
 @api_financeiro_bp.get("")
 @aluno_token_obrigatorio
 def status_financeiro():
+    if not saas_service.feature_enabled(database.academia_atual_id(), "financeiro"):
+        return resposta_erro("Financeiro não incluído no plano da academia.", 403, "RECURSO_NAO_INCLUSO")
     pessoa = database.obter_pessoa(g.aluno_id)
     if not pessoa:
         return resposta_erro("Aluno nao encontrado.", 404, "ALUNO_NAO_ENCONTRADO")
@@ -83,6 +86,8 @@ def status_financeiro():
 @api_financeiro_bp.post("/pix")
 @aluno_token_obrigatorio
 def gerar_pix():
+    if not saas_service.feature_enabled(database.academia_atual_id(), "pix"):
+        return resposta_erro("PIX não incluído no plano da academia.", 403, "RECURSO_NAO_INCLUSO")
     pessoa = database.obter_pessoa(g.aluno_id)
     if not pessoa:
         return resposta_erro("Aluno nao encontrado.", 404, "ALUNO_NAO_ENCONTRADO")

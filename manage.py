@@ -12,7 +12,7 @@ load_dotenv()
 
 import database
 from core.settings import Settings
-from services import auth_service, storage_service
+from services import auth_service, storage_service, saas_service
 from services.database_migration_service import inspect_sqlite_source, migrate_sqlite_to_postgresql
 
 
@@ -124,11 +124,25 @@ def agent_status() -> int:
     database.criar_tabelas()
     print(json.dumps({
         "ok": True,
-        "version": "6.13",
+        "version": "6.14",
         "agents": database.listar_agentes(),
     }, indent=2, ensure_ascii=False))
     return 0
 
+
+
+
+def saas_status() -> int:
+    _configured_settings()
+    database.criar_tabelas()
+    print(json.dumps({
+        "ok": True,
+        "version": "6.14",
+        "schema": database.SCHEMA_VERSION,
+        "metrics": saas_service.dashboard_saas(),
+        "plans": saas_service.listar_planos(),
+    }, indent=2, ensure_ascii=False))
+    return 0
 
 def tenant_status() -> int:
     _configured_settings()
@@ -196,7 +210,8 @@ def main() -> int:
     sub.add_parser("db-status", help="Testa conexao, schema e integridade do banco.")
     sub.add_parser("agent-status", help="Lista agentes locais e estado de heartbeat.")
     sub.add_parser("storage-status", help="Testa storage privado e mostra contagem de objetos.")
-    sub.add_parser("tenant-status", help="Lista academias e unidades da V6.13.")
+    sub.add_parser("tenant-status", help="Lista academias e unidades.")
+    sub.add_parser("saas-status", help="Mostra metricas, planos e estado SaaS da V6.14.")
     ta = sub.add_parser("tenant-create-academia", help="Cria uma academia e sua unidade principal.")
     ta.add_argument("--nome", required=True)
     ta.add_argument("--codigo", required=True, help="Slug/codigo unico da academia.")
@@ -243,6 +258,8 @@ def main() -> int:
         return storage_migrate_legacy(args)
     if args.command == "tenant-status":
         return tenant_status()
+    if args.command == "saas-status":
+        return saas_status()
     if args.command == "tenant-create-academia":
         return tenant_create_academia(args)
     if args.command == "tenant-create-unidade":

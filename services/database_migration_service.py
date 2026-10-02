@@ -1,4 +1,4 @@
-"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.13)."""
+"""Migracao controlada do banco legado SQLite para PostgreSQL (V6.14)."""
 
 from __future__ import annotations
 
@@ -42,6 +42,15 @@ TABLE_ORDER = [
     "catracas",
     "logs_acesso",
     "logs_admin",
+    "saas_planos",
+    "saas_recursos",
+    "saas_plano_recursos",
+    "saas_assinaturas",
+    "saas_cupons",
+    "saas_site_conteudo",
+    "academia_branding",
+    "saas_checkouts",
+    "saas_auditoria",
     "schema_meta",
 ]
 
@@ -78,6 +87,15 @@ PRIMARY_KEYS = {
     "catracas": ["id"],
     "logs_acesso": ["id"],
     "logs_admin": ["id"],
+    "saas_planos": ["id"],
+    "saas_recursos": ["codigo"],
+    "saas_plano_recursos": ["plano_id", "recurso_codigo"],
+    "saas_assinaturas": ["id"],
+    "saas_cupons": ["id"],
+    "saas_site_conteudo": ["chave"],
+    "academia_branding": ["academia_id"],
+    "saas_checkouts": ["id"],
+    "saas_auditoria": ["id"],
     "schema_meta": ["chave"],
 }
 
@@ -205,7 +223,11 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
         # removemos esses seeds antes da copia para preservar exatamente os IDs
         # do SQLite e evitar conflito de UNIQUE(nome) em planos/catracas.
         if not existing and not allow_existing:
-            for table in ("configuracoes", "planos", "catracas", "database_migrations", "schema_meta"):
+            for table in (
+                "configuracoes", "planos", "catracas", "saas_plano_recursos", "saas_assinaturas",
+                "saas_cupons", "saas_checkouts", "saas_auditoria", "academia_branding",
+                "saas_site_conteudo", "saas_recursos", "saas_planos", "database_migrations", "schema_meta"
+            ):
                 dst.execute(f"DELETE FROM {table}")
 
         source_tables = _sqlite_tables(src)
@@ -247,6 +269,10 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
             """
         )
 
+        # Garante seeds SaaS quando a origem e anterior a V6.14; em fontes V6.14
+        # os INSERT ... ON CONFLICT preservam os dados copiados.
+        database._criar_schema_saas_v614(dst)
+
         # A fonte pode estar em schema anterior; o destino sempre termina no schema atual.
         dst.execute(
             "INSERT INTO schema_meta(chave,valor) VALUES('schema_version',?) "
@@ -257,7 +283,7 @@ def migrate_sqlite_to_postgresql(source: str | Path, *, allow_existing: bool = F
         dst.execute(
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO UPDATE SET detalhes=EXCLUDED.detalhes",
-            ("sqlite-to-postgresql-v6.13", str(source_path), detalhe),
+            ("sqlite-to-postgresql-v6.14", str(source_path), detalhe),
         )
         database._sincronizar_sequences_postgresql(dst)
         dst.commit()

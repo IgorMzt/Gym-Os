@@ -5,7 +5,7 @@ import time
 from flask import Blueprint, jsonify, request
 
 import database
-from services import auth_service
+from services import auth_service, saas_service
 from services.mobile_token_service import TokenError, emitir_par_tokens, revogar_refresh_token, rotacionar_refresh_token
 from .common import aluno_token_obrigatorio, resposta_erro
 
@@ -72,6 +72,8 @@ def login():
     tenant = database.resolver_tenant(academia_codigo, unidade_codigo)
     if tenant:
         database.set_tenant_context(tenant["academia"]["id"], tenant["unidade"]["id"])
+        if not saas_service.feature_enabled(tenant["academia"]["id"], "mobile"):
+            return resposta_erro("Aplicativo mobile não incluído no plano da academia.", 403, "RECURSO_NAO_INCLUSO")
     if not login_informado or not senha:
         return resposta_erro("Informe login e senha.", 400, "CAMPOS_OBRIGATORIOS")
 

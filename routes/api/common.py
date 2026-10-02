@@ -5,6 +5,7 @@ from functools import wraps
 from flask import g, jsonify, request
 
 import database
+from services import saas_service
 from services.mobile_token_service import TokenError, TokenExpired, validar_access_token
 
 
@@ -34,6 +35,8 @@ def aluno_token_obrigatorio(func):
             return resposta_erro("Token de acesso invalido.", 401, "TOKEN_INVALIDO")
 
         database.set_tenant_context(payload.get("academia_id") or 1, payload.get("unidade_id") or 1)
+        if not saas_service.feature_enabled(database.academia_atual_id(), "mobile"):
+            return resposta_erro("Aplicativo mobile não incluído no plano da academia.", 403, "RECURSO_NAO_INCLUSO")
         acesso = database.obter_acesso_aluno_api(payload["acesso_id"], payload["pessoa_id"])
         if not acesso or not acesso.get("ativo"):
             return resposta_erro("Acesso do aluno indisponivel.", 401, "ACESSO_INATIVO")

@@ -1,5 +1,20 @@
 # Changelog
 
+## V6.14 — SaaS completo
+
+- Super Admin separado do tenant em `/saas`, com dashboard comercial, academias, planos, assinaturas, cupons, checkouts, Agents, CMS e auditoria.
+- Schema 24 com planos SaaS, recursos/feature flags, assinaturas, cupons, conteúdo do site, checkouts e branding por academia.
+- Portal comercial em `/site`, `/site/recursos` e `/site/planos`, com visual preto/azul-marinho/azul-bebê, efeitos de glow e microinterações.
+- Fluxo de aquisição: escolha de plano → cadastro → checkout → provisionamento automático da academia, unidade principal, admin e assinatura.
+- Planos dinâmicos com preço mensal/anual, trial, limites e recursos liberados pelo backend.
+- Limites de alunos, unidades, professores e Agents aplicados aos tenants SaaS; tenants legados permanecem compatíveis até receberem assinatura.
+- Feature flags efetivos para mobile, financeiro, PIX, catraca, biometria, relatórios, Agents e branding.
+- Branding/white label por academia com cores, logo, favicon, banner, imagem de login e preview.
+- Login pode ser aberto com `?academia=<slug>` para carregar a identidade visual do tenant antes da autenticação.
+- CMS do site comercial permite alterar textos e imagens sem redeploy.
+- Migração SQLite→PostgreSQL atualizada para transportar as tabelas SaaS da V6.14.
+- Novos testes de regressão para schema, checkout/provisionamento, feature flags, limites, cupons, CMS, branding e troca de plano.
+
 ## V6.13 — Multiacademia + multiunidade
 
 - Schema atualizado para **23** com `academias` e `unidades`; instalações existentes são absorvidas automaticamente por `principal/principal`.
