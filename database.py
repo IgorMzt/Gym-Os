@@ -2210,7 +2210,13 @@ def _config_tenant_key(chave: str) -> str:
 def obter_configuracoes():
     conn=conectar()
     try:
-        base = {r["chave"]: r["valor"] for r in conn.execute("SELECT chave,valor FROM configuracoes WHERE chave NOT LIKE 'tenant:%'").fetchall()}
+        base = {
+    r["chave"]: r["valor"]
+    for r in conn.execute(
+        "SELECT chave, valor FROM configuracoes WHERE chave NOT LIKE ?",
+        ("tenant:%",),
+    ).fetchall()
+}
         prefix = f"tenant:{academia_atual_id()}:{unidade_atual_id()}:"
         for r in conn.execute("SELECT chave,valor FROM configuracoes WHERE chave LIKE ?", (prefix + "%",)).fetchall():
             base[str(r["chave"])[len(prefix):]] = r["valor"]
