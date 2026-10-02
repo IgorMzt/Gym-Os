@@ -1,4 +1,0 @@
-Gym OS V6.15 — Comunicação
-Schema: 25
-
-Inclui central de comunicados, notificações persistentes, push, preferências, professor→aluno, eventos de treino/financeiro, mobile e isolamento multiacademia.

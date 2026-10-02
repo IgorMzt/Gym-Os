@@ -1,3 +1,14 @@
+# Changelog
+
+## v6.0.0 — Release
+
+- Consolida a linha V6 como release estável do Gym OS.
+- Runtime passa a reportar `6.0.0`; schema permanece em `27`.
+- Documentação reorganizada para instalação, arquitetura, deploy, mobile e Agent.
+- Pacote público sanitizado: sem `.env`, ambiente virtual, caches, bancos, logs, uploads privados, histórico Git ou listas temporárias de arquivos.
+- Estrutura de release preparada para PostgreSQL, SaaS/multiacademia, app mobile, Agent local, comunicação, inteligência e hardening.
+- Adicionado checklist explícito de validação antes da tag.
+
 # V6.15 — Comunicação
 
 - Central de comunicados tenant-aware para administradores e recepção.

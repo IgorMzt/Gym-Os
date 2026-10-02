@@ -34,3 +34,14 @@ storage/private/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# JavaScript / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+
+# Release / local tooling
+*.zip
+release/

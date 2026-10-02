@@ -8,6 +8,6 @@ class HardeningV617Tests(unittest.TestCase):
         self.assertTrue(security_service.allow('x',2,60)); self.assertTrue(security_service.allow('x',2,60)); self.assertFalse(security_service.allow('x',2,60))
     def test_rate_limit_isola_chaves(self):
         self.assertTrue(security_service.allow('a',1,60)); self.assertFalse(security_service.allow('a',1,60)); self.assertTrue(security_service.allow('b',1,60))
-    def test_versao_617(self): self.assertEqual(Settings.__dataclass_fields__['app_version'].default,'6.17')
+    def test_versao_617(self): self.assertEqual(Settings.__dataclass_fields__['app_version'].default,'6.0.0')
 
 if __name__=='__main__': unittest.main()

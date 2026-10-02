@@ -1,423 +1,162 @@
-# Panobianco Gym OS
+# Gym OS
 
-Sistema web para operação de academia, reunindo **controle de acesso por reconhecimento facial**, gestão de alunos e professores, prescrição e execução de treinos, avaliações físicas, financeiro integrado ao Asaas e um **PWA para o aluno**.
+> Plataforma SaaS de gestão de academias com operação web, aplicativo do aluno, controle de acesso, biometria, pagamentos, comunicação e inteligência operacional.
 
-> **Status:** V5.9.1 permanece como release estável; a V6 está em desenvolvimento no branch `develop`. A **V6.14 adiciona a camada SaaS completa**, com Super Admin, portal comercial, contratação, planos/feature flags e branding por academia, preservando multiacademia, storage privado, biometria e Agent.
+**Release atual:** `v6.0.0` · **Schema:** `27` · **Backend:** Python 3.11 / Flask · **Banco recomendado:** PostgreSQL 17 · **Mobile:** React Native + Expo
 
 ## Visão geral
 
-O projeto começou como um verificador facial para catraca e evoluiu para uma plataforma de gestão de academia. Hoje há interfaces separadas por papel e regras de permissão para **Administração**, **Recepção**, **Professor** e **Aluno**.
+O Gym OS reúne em um único produto a rotina administrativa da academia e a experiência do aluno. A aplicação foi construída para operar em modelo multiacademia/multiunidade, mantendo isolamento de tenant e separando o plano de controle SaaS da operação de cada cliente.
 
-### Principais recursos
+### Destaques
 
-- **Controle de acesso** com OpenCV + `face_recognition`, múltiplas amostras faciais, prova de vida heurística por movimento e histórico de liberações/bloqueios.
-- **Gestão de alunos** com CPF, matrícula, plano, vencimento, foto, situação financeira, bloqueio/liberação e histórico.
-- **Matrícula aleatória** para novos alunos, mantendo compatibilidade com matrículas legadas.
-- **Professores** com cadastro, conta de acesso e vínculo exclusivo com alunos.
-- **Banco de exercícios** com grupo muscular, equipamento, dificuldade, instruções, imagem e vídeo.
-- **Fichas de treino** com treinos, exercícios, séries, repetições, carga, descanso e observações do professor.
-- **Execução e histórico** de treinos com snapshot da prescrição, carga anterior, cronômetro de descanso e evolução por exercício.
-- **Avaliações físicas** com peso, altura, IMC, composição corporal, medidas, fotos e evolução histórica.
-- **Financeiro** com planos, vencimentos, tolerância configurável e cobrança PIX via Asaas Sandbox/webhook.
-- **PWA do aluno** com primeiro acesso, treino, histórico, evolução, financeiro, perfil e alteração de senha.
-- **App mobile do aluno** em React Native/Expo com autenticação por token, treino real, histórico, evolução, financeiro, notificações, metas semanais, feedback pós-treino e experiência offline básica.
-- **Dashboard operacional** com indicadores, alertas e busca global de alunos.
-- **Segurança operacional** com papéis/permissões, sessões, CSRF, rate limiting de login, logs administrativos, backups, diagnóstico e verificações de integridade.
+- **SaaS e multiacademia:** Super Admin, planos, assinaturas, cupons, feature flags, onboarding e branding por academia.
+- **Gestão operacional:** alunos, professores, exercícios, fichas, avaliações, financeiro, dashboards e permissões.
+- **Controle de acesso:** Agent local, catraca, cache offline, sincronização, comandos remotos e reconhecimento facial.
+- **Storage privado e biometria:** arquivos fora de `/static`, URLs temporárias e sincronização biométrica mínima para o Agent.
+- **Aplicativo do aluno:** treinos, histórico, evolução, financeiro, notificações, metas e experiência offline básica.
+- **Comunicação:** comunicados segmentados, central de notificações, preferências, push e deep links.
+- **Inteligência operacional:** sinais explicáveis de inatividade, queda de frequência e risco financeiro, com ações assistidas.
+- **Hardening:** rate limiting, eventos de segurança, headers defensivos, auditoria, health/readiness e validações de produção.
 
-## Stack
-
-| Camada | Tecnologia |
-| --- | --- |
-| Backend | Python 3.11 + Flask |
-| Banco | SQLite ou PostgreSQL (schema 23) |
-| Visão computacional | OpenCV + face_recognition + dlib |
-| Frontend | HTML, CSS e JavaScript vanilla |
-| PWA | Web App Manifest + Service Worker |
-| Storage | Privado local ou object storage S3/MinIO compatível |
-| Pagamentos | Asaas API / PIX |
-| Relatórios | ReportLab |
-
-## Estrutura do projeto
+## Arquitetura
 
 ```text
-.
-├── app.py                     # App factory Flask e bootstrap de runtime
-├── wsgi.py                    # Entrada WSGI para ambiente Linux/cloud
-├── manage.py                  # config, banco e migração SQLite → PostgreSQL
-├── core/                      # Configuração, logging e adapter PostgreSQL
-├── agent/                     # Agente local: cache, fila, acesso e hardware
-├── database.py                # Persistência compatível com SQLite/PostgreSQL
-├── config_service.py          # Configurações operacionais
-├── device_manager.py          # Integração/abstração dos dispositivos de acesso
-├── face_index.py              # Índice em memória dos encodings faciais
-├── validators.py              # Validações compartilhadas
-├── services/
-│   ├── auth_service.py
-│   ├── permissions.py
-│   ├── dashboard_service.py
-│   ├── professor_service.py
-│   ├── exercise_service.py
-│   ├── workout_service.py
-│   ├── execution_service.py
-│   ├── assessment_service.py
-│   └── payments/
-│       └── asaas_gateway.py
-├── templates/                 # Templates Jinja2
-├── storage/
-│   └── private/              # Arquivos privados locais; não versionados
-├── static/
-│   ├── assets/                # Identidade visual
-│   ├── css/
-│   ├── js/
-│   ├── uploads/               # Compatibilidade legada; não versionados
-│   ├── manifest.webmanifest
-│   └── sw.js
-├── tests/                     # Testes automatizados do núcleo
-├── requirements.txt
-├── requirements-prod.txt      # Dependências adicionais de produção
-├── install_windows.ps1
-├── .env.example              # Modelo público, sem segredos
-├── .env                      # Local e ignorado pelo Git
-├── .gitignore
-├── CHANGELOG.md
-└── SECURITY.md
+                         ┌──────────────────────┐
+                         │   Portal / SaaS      │
+                         │   Super Admin        │
+                         └──────────┬───────────┘
+                                    │
+┌──────────────┐          ┌─────────▼──────────┐          ┌─────────────────┐
+│ Web / PWA    │─────────▶│ Flask / REST API   │◀─────────│ App React Native │
+└──────────────┘          │ Services + Tenant  │          └─────────────────┘
+                          └──────┬───────┬─────┘
+                                 │       │
+                       ┌─────────▼─┐   ┌─▼──────────────┐
+                       │PostgreSQL │   │ Storage privado│
+                       └───────────┘   └────────────────┘
+                                 ▲
+                                 │ HTTPS / sync
+                          ┌──────┴────────┐
+                          │ Agent local   │
+                          │ câmera/catraca│
+                          └───────────────┘
 ```
 
-## Instalação no Windows
+Detalhes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-O ambiente validado usa **Python 3.11 64-bit**. No Windows, o projeto usa `dlib-bin` para evitar compilação local do dlib.
+## Estrutura
+
+```text
+agent/       Agent local e operação offline
+core/        settings, banco, logging e infraestrutura
+routes/      páginas web e APIs
+services/    regras de negócio e integrações
+templates/   interfaces Jinja2
+static/      CSS, JS e assets públicos
+storage/     storage privado local (conteúdo não versionado)
+mobile/      aplicativo React Native / Expo
+tests/       suíte automatizada
+docs/        documentação técnica e operacional
+```
+
+## Instalação rápida — Windows
+
+Pré-requisitos: **Python 3.11 64-bit**, Git e, para PostgreSQL local, Docker Desktop.
 
 ```powershell
-py -3.11 -m venv venv
-.\venv\Scripts\Activate.ps1
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install face-recognition==1.3.0 --no-deps
-```
-
-Ou execute o instalador incluído:
-
-```powershell
 .\install_windows.ps1
-```
-
-Valide as dependências principais:
-
-```powershell
-python -c "import dlib, face_recognition, cv2, numpy; print('dlib:', dlib.__version__); print('face_recognition: OK'); print('OpenCV:', cv2.__version__); print('NumPy:', numpy.__version__)"
-```
-
-## Configuração
-
-O projeto carrega automaticamente o arquivo `.env` da raiz usando `python-dotenv`. No pacote local há um `.env` pronto para edição e o Git o ignora; no repositório deve existir apenas o `.env.example`.
-
-A V6.12 mantém a separação por ambiente/papel e o backend dual da V6.10, adicionando storage privado. Para desenvolvimento local, os valores principais são:
-
-```env
-APP_ENV=development
-APP_ROLE=local
-SECRET_KEY=uma-chave-aleatoria-longa
-ADMIN_USER=admin
-ADMIN_PASSWORD=sua-senha-forte
-FLASK_DEBUG=0
-DATABASE_BACKEND=sqlite
-STORAGE_BACKEND=local
-ENABLE_LOCAL_HARDWARE=1
-```
-
-O `.env.example` documenta também proxy seguro, logging, pool PostgreSQL, `DATABASE_URL`, storage e o canal do agente local.
-
-`SECRET_KEY` e `ASAAS_WEBHOOK_TOKEN` já podem ser gerados aleatoriamente no seu `.env` local. Você deve trocar `ADMIN_PASSWORD` e preencher `ASAAS_API_KEY`. Se preferir recriar o arquivo a partir do modelo:
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-> **Importante:** `.env`, `perfis.db`, `static/uploads/`, `storage/private/` e backups são dados locais e não devem ser commitados. O `.gitignore` já protege esses caminhos, mas sempre confira `git status` antes do primeiro push.
-
-## Executando
-
-Com o ambiente virtual ativo:
-
-```powershell
-python app.py
-```
-
-A aplicação local fica disponível em:
-
-```text
-http://localhost:5000
-```
-
-A primeira inicialização cria/migra o banco `perfis.db` automaticamente quando `DATABASE_BACKEND=sqlite`.
-
-### PostgreSQL local para validação
-
-A V6.10 inclui um compose opcional para testar PostgreSQL sem alterar o SQLite atual:
+Para desenvolvimento com PostgreSQL:
 
 ```powershell
 docker compose -f compose.postgres.yml up -d
-python -m pip install -r requirements.txt
-```
-
-No `.env`, configure temporariamente:
-
-```env
-DATABASE_BACKEND=postgresql
-DATABASE_URL=postgresql://gymos:gymos_dev@127.0.0.1:5432/gymos
-DATABASE_POOL_MIN=1
-DATABASE_POOL_MAX=8
-DATABASE_POOL_TIMEOUT=10
-APP_TIMEZONE=America/Sao_Paulo
-```
-
-Para um **smoke test isolado** de um banco PostgreSQL vazio, você pode inicializar o schema:
-
-```powershell
-python manage.py check-config
 python manage.py init-db
-python manage.py db-status
+python -m pytest -q
+python app.py
 ```
 
-> As credenciais do compose são **somente para desenvolvimento local**. Não reutilize essa senha em staging/produção.
+A aplicação local fica em `http://127.0.0.1:5000`.
 
-### Migração SQLite → PostgreSQL
+> O arquivo `.env` contém segredos e **não deve ser commitado**. O pacote de release contém somente `.env.example`.
 
-Antes da migração, mantenha uma cópia segura de `perfis.db` e use um PostgreSQL **novo/vazio**. Se você pretende migrar o SQLite real, **não execute `python manage.py init-db` nesse destino antes da migração**, pois esse comando pode criar dados de bootstrap e a migração segura recusará um destino com dados de negócio. Com `DATABASE_BACKEND=postgresql` configurado:
+Guia completo: [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
-```powershell
-python manage.py migrate-sqlite --source perfis.db --dry-run
-python manage.py migrate-sqlite --source perfis.db
-python manage.py db-status
-```
+## Configuração
 
-O comando valida `PRAGMA quick_check` na origem, copia as tabelas em ordem de dependência, faz upsert por chave primária, atualiza o Schema 23, sincroniza as sequences PostgreSQL e registra a execução em `database_migrations`. Por segurança, ele recusa um destino que já contenha dados de negócio, salvo uso explícito de `--allow-existing`.
+Os principais grupos de variáveis estão documentados em `.env.example`:
 
-Para testar um PostgreSQL já configurado também existe:
+- runtime: `APP_ENV`, `APP_ROLE`, `SECRET_KEY`;
+- banco: `DATABASE_BACKEND`, `DATABASE_URL`;
+- storage: `STORAGE_BACKEND` e credenciais do object storage;
+- Agent: `AGENT_*`;
+- pagamentos: `ASAAS_*`;
+- SaaS: `SAAS_ADMIN_*`, `SAAS_CHECKOUT_MODE`.
 
-```powershell
-python -m scripts.postgres_smoke
-```
-
-## Banco e preparação de produção — V6.10
-
-Antes de qualquer deploy, valide o ambiente:
-
-```powershell
-python manage.py check-config
-```
-
-Em produção, a aplicação recusa `SECRET_KEY` fraca, senha administrativa padrão e `FLASK_DEBUG=1`. Quando `AUTO_INIT_DB=0`, inicialize/migre explicitamente:
-
-```powershell
-python manage.py init-db
-```
-
-Health checks:
-
-```text
-GET /health/live   # processo Flask vivo
-GET /health/ready  # banco, storage e bloqueios arquiteturais
-GET /health        # compatibilidade com o health check anterior
-```
-
-A configuração `APP_ROLE=cloud` desativa operações de hardware local. Na V6.10, o bloqueio `database_postgresql_pendente` desaparece quando `DATABASE_BACKEND=postgresql` e uma `DATABASE_URL` válida são configurados. `storage_objeto_pendente` desaparece quando o papel cloud usa `STORAGE_BACKEND=object` com bucket privado configurado.
-
-
-## Multiacademia e multiunidade — V6.13
-
-O mesmo backend pode hospedar várias academias e unidades com contexto isolado. Bancos existentes são migrados automaticamente para **Academia Principal (`principal`) → Unidade Principal (`principal`)**, sem apagar os dados atuais.
-
-- alunos, usuários, professores, catracas, agentes, logs, storage e configurações passam a respeitar academia/unidade;
-- planos e exercícios são associados à academia;
-- o login web e o app mobile aceitam código da academia e da unidade;
-- tokens mobile carregam o tenant e preservam o contexto também durante o refresh;
-- cada Agent informa `AGENT_ACADEMIA` e `AGENT_UNIDADE` no registro e sincroniza somente sua unidade;
-- configurações operacionais ficam isoladas por academia/unidade, mantendo fallback para valores legados;
-- `python manage.py tenant-status` lista a estrutura atual;
-- `tenant-create-academia`, `tenant-create-unidade` e `tenant-create-admin` permitem preparar novos tenants pelo CLI.
-
-Exemplo:
-
-```powershell
-python manage.py tenant-create-academia --nome "Academia Teste" --codigo teste
-python manage.py tenant-create-admin --academia teste --unidade principal --login admin-teste --senha "troque-esta-senha"
-python manage.py tenant-status
-```
-
-## Storage e biometria — V6.12
-
-Novos uploads usam referências privadas (`private://` no ambiente local ou `object://` em S3/MinIO). As telas não montam mais URLs públicas diretamente para esses arquivos: o backend entrega links temporários, e caminhos antigos em `static/uploads` continuam compatíveis durante a migração.
-
-Configuração cloud típica:
-
-```env
-APP_ROLE=cloud
-DATABASE_BACKEND=postgresql
-DATABASE_URL=postgresql://...
-STORAGE_BACKEND=object
-STORAGE_BUCKET=gym-os-private
-STORAGE_REGION=sa-east-1
-STORAGE_ENDPOINT_URL=
-STORAGE_PREFIX=gym-os
-STORAGE_SIGNED_URL_TTL=300
-STORAGE_SSE=AES256
-```
-
-Validação e retenção:
-
-```powershell
-python manage.py storage-status
-python manage.py storage-migrate-legacy --dry-run
-python manage.py storage-migrate-legacy
-python manage.py storage-purge --dry-run
-python manage.py storage-purge
-```
-
-Depois da atualização de um banco com dados reais, `storage-migrate-legacy --dry-run` lista fotos ainda expostas em `static/uploads`; sem `--dry-run`, copia o conteúdo para o backend privado configurado, atualiza as referências e remove o arquivo público antigo.
-
-O PostgreSQL guarda metadados e referências; o conteúdo fica no storage. Para backup em produção, combine `pg_dump`/snapshot do banco com versionamento/snapshot/replicação do bucket conforme o provedor.
-
-## Agente local — V6.12
-
-O diretório `agent/` agora implementa o processo local da academia. O segredo `AGENT_API_TOKEN` serve apenas para o **registro/bootstrap**; o backend emite um token individual por máquina e persiste somente seu hash.
-
-Fluxo básico de teste, com o backend já iniciado:
-
-```powershell
-$env:AGENT_SERVER_URL="http://127.0.0.1:5000"
-$env:AGENT_API_TOKEN="mesmo-bootstrap-do-backend"
-$env:AGENT_UID="academia-principal-pc01"
-python -m agent.main --once --sync
-python -m agent.main --diagnose
-python manage.py agent-status
-```
-
-O agente mantém um `agent_state.db` local (ignorado pelo Git) com cache de acesso e outbox. Se a internet cair, decisões podem usar o cache por uma janela limitada; quando o cache expira, o acesso **falha fechado**. Eventos offline são enviados de forma idempotente quando a conexão retorna.
-
-O painel **Sistema → Agentes locais** mostra heartbeat, fila, idade do cache e permite enfileirar `PING`, sincronização e teste de catraca. A V6.12 inclui `SYNC_BIOMETRICS`; o snapshot leva encodings e versões biométricas, mas não fotos privadas. O modo `SIMULADA` funciona sem hardware; adaptadores HTTP/SERIAL/HARDWARE ainda precisam ser implementados conforme o modelo físico da catraca utilizada.
-
-Para um futuro servidor Linux/cloud, existe `wsgi.py` e `requirements-prod.txt`. O servidor de desenvolvimento `python app.py` continua sendo o fluxo local.
-
-## Perfis de acesso
-
-| Papel | Área principal |
-| --- | --- |
-| Admin | Dashboard, alunos, professores, usuários, treinos, avaliações, financeiro, configurações e diagnóstico |
-| Recepção | Dashboard, alunos, financeiro e operação da catraca |
-| Professor | Minha Área, alunos vinculados, exercícios, fichas, execuções e avaliações |
-| Aluno | PWA com treino, histórico, evolução, financeiro e perfil |
-
-O aluno pode ativar o primeiro acesso usando os dados previamente cadastrados pela academia. A ativação não cria uma matrícula de academia: ela cria apenas a credencial do aplicativo para um aluno existente.
-
-## PWA do aluno
-
-O PWA pode ser aberto em `/app` depois da autenticação. Para instalação em celular fora de `localhost`, use HTTPS. O Service Worker fornece cache dos recursos essenciais e a navegação inferior prioriza Início, Histórico, Treino, Evolução e Perfil.
-
-## Integração Asaas
-
-A integração financeira está preparada para **Asaas Sandbox**. O fluxo atual contempla criação de cobrança PIX, QR Code/copia-e-cola, webhook, idempotência, histórico de eventos e atualização do estado financeiro do aluno.
-
-Para receber webhooks durante desenvolvimento local, exponha a aplicação por HTTPS (por exemplo, usando um túnel) e configure no Asaas o endpoint:
-
-```text
-/webhooks/asaas
-```
-
-O token configurado no Asaas deve ser o mesmo de `ASAAS_WEBHOOK_TOKEN`.
+Em produção, use PostgreSQL, HTTPS, cookies seguros, credenciais fortes e um secret manager. Execute `python manage.py check-config` antes do deploy.
 
 ## Testes
 
-Os testes do núcleo ficam em `tests/`:
+Instale as ferramentas de desenvolvimento:
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
 ```
 
-Antes de publicar uma nova versão, também é recomendável validar:
+A release candidate foi preparada sobre uma base que possuía **82 testes automatizados passando** antes da limpeza de release. Rode a suíte novamente no ambiente de destino antes de criar a tag.
+
+## Mobile
 
 ```powershell
-python -m compileall .
+cd mobile
+npm ci
+npx expo start
 ```
 
-No SQLite, as verificações usam `PRAGMA quick_check`/`foreign_key_check`; no PostgreSQL, `database.verificar_integridade()` valida conexão, constraints e versão do schema.
+Configuração e observações: [`docs/MOBILE.md`](docs/MOBILE.md).
 
-## Dados sensíveis e privacidade
+## Agent local
 
-Este sistema pode tratar **dados pessoais e biométricos**, incluindo CPF, fotos e encodings faciais. Por isso:
+O Agent mantém hardware e biometria fora do backend cloud. Ele possui heartbeat, cache de acesso, fila offline, sincronização e comandos controlados.
 
-- `perfis.db` não é versionado;
-- novos arquivos privados ficam em `storage/private/` no modo local ou em bucket privado no modo object;
-- `static/uploads/` permanece apenas como compatibilidade legada e não é versionado;
-- `.env` não é versionado;
-- backups devem ser armazenados fora do repositório e protegidos;
-- produção deve utilizar HTTPS, credenciais fortes e política adequada de acesso/retenção;
-- a base de demonstração/publicação não deve conter dados reais de alunos.
-
-Consulte [SECURITY.md](SECURITY.md) antes de qualquer implantação real.
-
-## Limitações da versão atual
-
-A V6.14 adiciona a camada comercial/SaaS sobre a base multiacademia da V6.13. O produto já possui administração de clientes, planos, assinaturas, portal comercial, aquisição e branding; o hardening final permanece planejado para a V6.17. Adaptadores de catraca física dependem do equipamento escolhido.
-
-A prova de vida atual é heurística e **não substitui um mecanismo dedicado de anti-spoofing/liveness** em um cenário de segurança elevado.
-
-## Roadmap
-
-### V6
-
-- V6.1–V6.8: modularização, API mobile, app Expo, treinos, histórico, evolução, financeiro, push e experiência mobile;
-- V6.9: preparação de produção/cloud;
-- V6.10: PostgreSQL, pool e migração SQLite → PostgreSQL;
-- V6.11: agente local, cache offline, fila e comandos cloud ↔ academia;
-- V6.12: storage privado/cloud, URLs assinadas, retenção e versionamento/sincronização biométrica;
-- **V6.13: multiacademia/multiunidade e isolamento de dados**;
-- **V6.14: administração SaaS, site comercial, checkout, planos, feature flags e white label**;
-- V6.14: administração SaaS;
-- V6.15: comunicação;
-- V6.16: inteligência/automações;
-- V6.17: hardening final;
-- **V6.0.0:** release oficial após homologação e merge `develop` → `main`.
-
-## Identidade visual
-
-O repositório contém assets com identidade Panobianco. Antes de tornar o projeto público, confirme que você possui autorização para publicar e redistribuir esses arquivos e o uso da marca. Caso contrário, substitua-os por uma identidade própria antes de publicar o repositório.
-
-## Licença
-
-Nenhuma licença de código aberto foi definida neste repositório. Se a intenção for torná-lo público e permitir reutilização por terceiros, escolha uma licença antes da publicação.
-
-
-## V6.14 — SaaS completo
-
-A V6.14 adiciona a camada comercial e de administração do Gym OS:
-
-- **Site comercial:** `http://127.0.0.1:5000/site`
-- **Super Admin:** `http://127.0.0.1:5000/saas/login`
-- **Aparência da academia:** `/aparencia` (plano com recurso `branding`)
-- **Planos/feature flags:** configurados pelo Super Admin e validados no backend.
-- **Checkout sandbox:** cria academia, Unidade Principal, primeiro ADMIN e assinatura automaticamente.
-
-Variáveis adicionais:
-
-```env
-SAAS_ADMIN_USER=superadmin
-SAAS_ADMIN_PASSWORD=troque-por-uma-senha-forte-de-12-ou-mais-caracteres
-SAAS_CHECKOUT_MODE=sandbox
+```powershell
+python -m agent.main --diagnose
+python -m agent.main --once --sync
 ```
 
-`SAAS_CHECKOUT_MODE=sandbox` não realiza cobrança real; ele serve para desenvolvimento e provisiona a contratação imediatamente. `manual` deixa o checkout aguardando aprovação no Super Admin e `disabled` bloqueia novas contratações.
+Veja [`docs/AGENT.md`](docs/AGENT.md).
 
-Para conferir o estado SaaS via CLI:
+## Produção
 
-```bash
-python manage.py saas-status
-```
+O Flask development server não é o servidor de produção. A configuração Linux/cloud inclui `wsgi.py` e dependências WSGI em `requirements-prod.txt`.
 
+Checklist completo: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-## V6.15 — Comunicação
+Endpoints operacionais:
 
-A V6.15 adiciona uma central tenant-aware de comunicados e notificações. Administradores e recepção podem criar, segmentar, agendar e publicar comunicados; o aluno recebe uma caixa persistente no app, com leitura, preferências e push Expo. Eventos de treino e financeiro também passam a gerar notificações persistentes, e professores podem enviar mensagens aos próprios alunos. O schema atual é 25.
+- `/health/live` — processo ativo;
+- `/health/ready` — dependências/configuração prontas;
+- `/health` — compatibilidade.
 
-### V6.16 / V6.17
-A V6.16 adiciona inteligência operacional explicável para retenção, frequência e risco financeiro, com ações assistidas integradas às notificações. A V6.17 consolida hardening de produção com rate limiting, eventos de segurança, headers defensivos e observabilidade de readiness. Schema atual: 27.
+## Segurança e privacidade
+
+O sistema pode processar CPF, informações financeiras, fotos e dados biométricos. Não publique bancos, uploads, encodings, logs, backups ou credenciais. Leia [`SECURITY.md`](SECURITY.md) antes de qualquer implantação pública.
+
+## Histórico
+
+O desenvolvimento da linha V6 introduziu, em sequência, API/mobile, PostgreSQL, Agent local, storage/biometria, multiacademia, SaaS, comunicação, inteligência e hardening. O histórico detalhado está em [`CHANGELOG.md`](CHANGELOG.md).
+
+## Release v6.0.0
+
+Esta é a primeira consolidação da arquitetura V6 como release. O schema de dados permanece em **27**; `6.0.0` é a versão do produto e não reinicia a numeração das migrations.
+
+## Licenciamento
+
+Este repositório não declara automaticamente uma licença de código aberto. Antes de distribuição pública ou uso por terceiros, o mantenedor deve escolher e adicionar o arquivo `LICENSE` apropriado.

@@ -87,3 +87,9 @@ A aplicação carrega `.env` localmente com `python-dotenv`. O arquivo real deve
 - Conteúdo e branding enviados pelo painel utilizam o storage privado da V6.12; imagens não são gravadas diretamente em `/static`.
 - Senhas de administradores criados pelo checkout são persistidas somente como hash.
 - Em produção, `SAAS_ADMIN_PASSWORD` deve ter pelo menos 12 caracteres e não pode permanecer no valor de exemplo.
+
+## Release v6.0.0
+
+A release mantém as proteções introduzidas no hardening da V6.17: rate limiting, eventos de segurança, headers defensivos e readiness. Essas medidas reduzem risco, mas não substituem TLS, firewall, secret manager, backup, atualização de dependências e revisão periódica de segurança.
+
+Antes de tornar o repositório público, configure um canal privado real para reporte de vulnerabilidades.

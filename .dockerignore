@@ -1,0 +1,15 @@
+.git
+.venv
+.env
+.pytest_cache
+**/__pycache__
+*.py[cod]
+*.db
+*.db-*
+*.log
+*.zip
+backups
+static/uploads
+storage/private
+mobile/node_modules
+mobile/.expo
