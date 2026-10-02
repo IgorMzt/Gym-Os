@@ -18,7 +18,7 @@ import face_recognition
 import numpy as np
 from flask import Blueprint, Response, abort, current_app, jsonify, redirect, render_template, request, session, url_for, send_file
 
-from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service
+from services import dashboard_service, auth_service, professor_service, exercise_service, workout_service, execution_service, assessment_service, push_service, communication_service
 from services.permissions import login_obrigatorio, papel_requerido
 from services.payments import AsaasGateway, GatewayError
 import database
@@ -90,9 +90,9 @@ def api_criar_ficha_treino():
         ficha_id = database.criar_ficha_treino(dados, int(session.get("usuario_id")))
         database.registrar_log_admin("FICHA_TREINO_CRIADA", str(ficha_id), dados["nome"], _ip_cliente())
         if dados.get("ativo", True):
-            push_service.enviar_para_aluno(
-                dados["pessoa_id"], "Novo treino disponível",
-                f"Sua ficha {dados['nome']} foi liberada.", {"url": "/treino", "tipo": "NOVA_FICHA"}
+            communication_service.notificar_aluno(
+                dados["pessoa_id"], "Novo treino disponível", f"Sua ficha {dados['nome']} foi liberada.",
+                categoria="TREINO", tipo="NOVA_FICHA", url="/treino"
             )
         return jsonify({"sucesso": True, "id": ficha_id})
     except ValueError as exc:
@@ -140,6 +140,8 @@ def api_atualizar_ficha_treino(ficha_id):
             return jsonify({"sucesso": False, "erro": "Sem permissão para este aluno."}), 403
         database.atualizar_ficha_treino(ficha_id, dados)
         database.registrar_log_admin("FICHA_TREINO_ATUALIZADA", str(ficha_id), dados["nome"], _ip_cliente())
+        if dados.get("ativo", True):
+            communication_service.notificar_aluno(dados["pessoa_id"], "Treino atualizado", f"Sua ficha {dados['nome']} foi atualizada.", categoria="TREINO", tipo="TREINO_ATUALIZADO", url="/treino")
         return jsonify({"sucesso": True})
     except ValueError as exc:
         return jsonify({"sucesso": False, "erro": str(exc)}), 400

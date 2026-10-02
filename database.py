@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = Path(os.getenv("SQLITE_PATH") or (BASE_DIR / "perfis.db"))
 DATABASE_BACKEND = (os.getenv("DATABASE_BACKEND") or "sqlite").strip().lower()
 DATABASE_URL = (os.getenv("DATABASE_URL") or "").strip()
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 IntegrityError = database_backend.integrity_error_types()
 
 # V6.13 — contexto multiacademia. IDs 1/1 sao sempre a academia/unidade
@@ -726,12 +726,48 @@ def _criar_schema_saas_v614(conn):
             (chave, valor),
         )
 
+
+def _criar_schema_comunicacao_v615(conn):
+    """V6.15: comunicados e caixa de notificacoes tenant-aware."""
+    pk = "BIGSERIAL PRIMARY KEY" if is_postgresql() else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS comunicados (
+            id {pk}, academia_id INTEGER NOT NULL, unidade_id INTEGER,
+            autor_usuario_id INTEGER, titulo TEXT NOT NULL, corpo TEXT NOT NULL,
+            categoria TEXT NOT NULL DEFAULT 'GERAL', prioridade TEXT NOT NULL DEFAULT 'NORMAL',
+            publico_tipo TEXT NOT NULL DEFAULT 'TODOS', pessoa_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'RASCUNHO', publicar_em TEXT, expirar_em TEXT,
+            imagem_ref TEXT, criado_em TEXT DEFAULT CURRENT_TIMESTAMP, atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_comunicados_tenant_status ON comunicados(academia_id,unidade_id,status)")
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS notificacoes (
+            id {pk}, academia_id INTEGER NOT NULL, unidade_id INTEGER NOT NULL,
+            pessoa_id INTEGER NOT NULL, comunicado_id INTEGER,
+            tipo TEXT NOT NULL DEFAULT 'SISTEMA', categoria TEXT NOT NULL DEFAULT 'GERAL',
+            prioridade TEXT NOT NULL DEFAULT 'NORMAL', titulo TEXT NOT NULL, corpo TEXT NOT NULL,
+            url TEXT, lida INTEGER NOT NULL DEFAULT 0, lida_em TEXT,
+            push_status TEXT NOT NULL DEFAULT 'PENDENTE', criado_em TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notificacoes_pessoa ON notificacoes(academia_id,unidade_id,pessoa_id,lida,id)")
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS notificacao_preferencias (
+            pessoa_id INTEGER PRIMARY KEY, comunicados INTEGER NOT NULL DEFAULT 1,
+            financeiro INTEGER NOT NULL DEFAULT 1, treino INTEGER NOT NULL DEFAULT 1,
+            sistema INTEGER NOT NULL DEFAULT 1, push INTEGER NOT NULL DEFAULT 1,
+            atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
 def _criar_tabelas_postgresql():
     conn = conectar()
     try:
         for statement in POSTGRES_SCHEMA_STATEMENTS:
             conn.execute(statement)
         _criar_schema_saas_v614(conn)
+        _criar_schema_comunicacao_v615(conn)
 
         conn.execute(
             "INSERT INTO schema_meta (chave, valor) VALUES ('schema_version', ?) "
@@ -784,6 +820,11 @@ def _criar_tabelas_postgresql():
             "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
             "ON CONFLICT(migration_key) DO NOTHING",
             ("schema-24-saas", "V6.14", "Administracao SaaS, planos, assinatura, CMS, checkout e branding."),
+        )
+        conn.execute(
+            "INSERT INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?) "
+            "ON CONFLICT(migration_key) DO NOTHING",
+            ("schema-25-comunicacao", "V6.15", "Central de notificacoes, comunicados, preferencias e push."),
         )
         _sincronizar_sequences_postgresql(conn)
         conn.commit()
@@ -1422,6 +1463,7 @@ def criar_tabelas():
             """
         )
         _criar_schema_saas_v614(conn)
+        _criar_schema_comunicacao_v615(conn)
         conn.execute(
             "INSERT OR REPLACE INTO schema_meta (chave, valor) VALUES ('schema_version', ?)",
             (str(SCHEMA_VERSION),),
@@ -1445,6 +1487,10 @@ def criar_tabelas():
         conn.execute(
             "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
             ("schema-24-saas", "V6.14", "Administracao SaaS, planos, assinatura, CMS, checkout e branding."),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO database_migrations(migration_key,origem,detalhes) VALUES(?,?,?)",
+            ("schema-25-comunicacao", "V6.15", "Central de notificacoes, comunicados, preferencias e push."),
         )
         conn.execute(
             """
@@ -5096,3 +5142,91 @@ def contar_comandos_pendentes_agente(agent_id: int) -> int:
         ).fetchone()[0] or 0)
     finally:
         conn.close()
+
+
+# ---------- Comunicacao (Schema 25 / V6.15) ----------
+def criar_comunicado(dados: dict) -> int:
+    conn=conectar()
+    try:
+        cur=conn.execute("""INSERT INTO comunicados(academia_id,unidade_id,autor_usuario_id,titulo,corpo,categoria,prioridade,publico_tipo,pessoa_id,status,publicar_em,expirar_em,imagem_ref) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (academia_atual_id(), unidade_atual_id() if dados.get('publico_tipo')!='ACADEMIA' else None, dados.get('autor_usuario_id'), dados['titulo'], dados['corpo'], dados.get('categoria','GERAL'), dados.get('prioridade','NORMAL'), dados.get('publico_tipo','TODOS'), dados.get('pessoa_id'), dados.get('status','RASCUNHO'), dados.get('publicar_em'), dados.get('expirar_em'), dados.get('imagem_ref')))
+        cid=int(cur.lastrowid); conn.commit(); return cid
+    finally: conn.close()
+
+def obter_comunicado(comunicado_id:int):
+    conn=conectar()
+    try:
+        r=conn.execute("SELECT * FROM comunicados WHERE id=? AND academia_id=?",(comunicado_id,academia_atual_id())).fetchone(); return dict(r) if r else None
+    finally: conn.close()
+
+def listar_comunicados(limite=100):
+    conn=conectar()
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM comunicados WHERE academia_id=? AND (unidade_id=? OR unidade_id IS NULL) ORDER BY id DESC LIMIT ?",(academia_atual_id(),unidade_atual_id(),max(1,min(int(limite),500)))).fetchall()]
+    finally: conn.close()
+
+def atualizar_comunicado(comunicado_id:int,dados:dict):
+    conn=conectar()
+    try:
+        conn.execute("""UPDATE comunicados SET titulo=?,corpo=?,categoria=?,prioridade=?,publico_tipo=?,pessoa_id=?,status=?,publicar_em=?,expirar_em=?,atualizado_em=CURRENT_TIMESTAMP WHERE id=? AND academia_id=?""",
+          (dados['titulo'],dados['corpo'],dados.get('categoria','GERAL'),dados.get('prioridade','NORMAL'),dados.get('publico_tipo','TODOS'),dados.get('pessoa_id'),dados.get('status','RASCUNHO'),dados.get('publicar_em'),dados.get('expirar_em'),comunicado_id,academia_atual_id())); conn.commit()
+    finally: conn.close()
+
+def excluir_comunicado(comunicado_id:int):
+    conn=conectar()
+    try:
+        conn.execute("DELETE FROM notificacoes WHERE comunicado_id=? AND academia_id=?",(comunicado_id,academia_atual_id())); conn.execute("DELETE FROM comunicados WHERE id=? AND academia_id=?",(comunicado_id,academia_atual_id())); conn.commit()
+    finally: conn.close()
+
+def criar_notificacao(pessoa_id:int,titulo:str,corpo:str,*,tipo='SISTEMA',categoria='GERAL',prioridade='NORMAL',url=None,comunicado_id=None,academia_id=None,unidade_id=None):
+    aid=int(academia_id or academia_atual_id()); uid=int(unidade_id or unidade_atual_id()); conn=conectar()
+    try:
+        cur=conn.execute("""INSERT INTO notificacoes(academia_id,unidade_id,pessoa_id,comunicado_id,tipo,categoria,prioridade,titulo,corpo,url) VALUES(?,?,?,?,?,?,?,?,?,?)""",(aid,uid,pessoa_id,comunicado_id,tipo,categoria,prioridade,titulo,corpo,url)); nid=int(cur.lastrowid); conn.commit(); return nid
+    finally: conn.close()
+
+def listar_notificacoes_pessoa(pessoa_id:int,limite=50,somente_nao_lidas=False):
+    conn=conectar()
+    try:
+        sql="SELECT * FROM notificacoes WHERE academia_id=? AND unidade_id=? AND pessoa_id=?"; params=[academia_atual_id(),unidade_atual_id(),pessoa_id]
+        if somente_nao_lidas: sql+=" AND lida=0"
+        sql+=" ORDER BY id DESC LIMIT ?"; params.append(max(1,min(int(limite),200)))
+        return [dict(r) for r in conn.execute(sql,tuple(params)).fetchall()]
+    finally: conn.close()
+
+def contar_notificacoes_nao_lidas(pessoa_id:int):
+    conn=conectar()
+    try: return int(conn.execute("SELECT COUNT(*) FROM notificacoes WHERE academia_id=? AND unidade_id=? AND pessoa_id=? AND lida=0",(academia_atual_id(),unidade_atual_id(),pessoa_id)).fetchone()[0])
+    finally: conn.close()
+
+def marcar_notificacao_lida(pessoa_id:int,notificacao_id:int):
+    conn=conectar()
+    try: conn.execute("UPDATE notificacoes SET lida=1,lida_em=CURRENT_TIMESTAMP WHERE id=? AND pessoa_id=? AND academia_id=? AND unidade_id=?",(notificacao_id,pessoa_id,academia_atual_id(),unidade_atual_id())); conn.commit()
+    finally: conn.close()
+
+def marcar_todas_notificacoes_lidas(pessoa_id:int):
+    conn=conectar()
+    try: conn.execute("UPDATE notificacoes SET lida=1,lida_em=CURRENT_TIMESTAMP WHERE pessoa_id=? AND academia_id=? AND unidade_id=? AND lida=0",(pessoa_id,academia_atual_id(),unidade_atual_id())); conn.commit()
+    finally: conn.close()
+
+def preferencias_notificacao(pessoa_id:int):
+    conn=conectar()
+    try:
+        r=conn.execute("SELECT * FROM notificacao_preferencias WHERE pessoa_id=?",(pessoa_id,)).fetchone()
+        return dict(r) if r else {'pessoa_id':pessoa_id,'comunicados':1,'financeiro':1,'treino':1,'sistema':1,'push':1}
+    finally: conn.close()
+
+def salvar_preferencias_notificacao(pessoa_id:int,dados:dict):
+    vals=[1 if dados.get(k,True) else 0 for k in ('comunicados','financeiro','treino','sistema','push')]; conn=conectar()
+    try:
+        conn.execute("""INSERT INTO notificacao_preferencias(pessoa_id,comunicados,financeiro,treino,sistema,push,atualizado_em) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(pessoa_id) DO UPDATE SET comunicados=excluded.comunicados,financeiro=excluded.financeiro,treino=excluded.treino,sistema=excluded.sistema,push=excluded.push,atualizado_em=CURRENT_TIMESTAMP""",(pessoa_id,*vals)); conn.commit()
+    finally: conn.close()
+
+def listar_destinatarios_comunicado(comunicado:dict):
+    conn=conectar()
+    try:
+        tipo=comunicado.get('publico_tipo') or 'TODOS'; params=[academia_atual_id()]
+        sql="SELECT id,nome,academia_id,unidade_id FROM pessoas WHERE academia_id=?"
+        if tipo!='ACADEMIA': sql+=" AND unidade_id=?"; params.append(unidade_atual_id())
+        if tipo=='ALUNO': sql+=" AND id=?"; params.append(int(comunicado.get('pessoa_id') or 0))
+        return [dict(r) for r in conn.execute(sql,tuple(params)).fetchall()]
+    finally: conn.close()

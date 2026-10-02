@@ -577,4 +577,10 @@ POSTGRES_SCHEMA_STATEMENTS = [
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_login_lower ON usuarios(LOWER(login))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_aluno_acessos_login_lower ON aluno_acessos(LOWER(login))",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercicios_nome_lower ON exercicios(LOWER(nome))",
+
+    f"""CREATE TABLE IF NOT EXISTS comunicados (id BIGSERIAL PRIMARY KEY, academia_id BIGINT NOT NULL, unidade_id BIGINT, autor_usuario_id BIGINT, titulo TEXT NOT NULL, corpo TEXT NOT NULL, categoria TEXT NOT NULL DEFAULT 'GERAL', prioridade TEXT NOT NULL DEFAULT 'NORMAL', publico_tipo TEXT NOT NULL DEFAULT 'TODOS', pessoa_id BIGINT, status TEXT NOT NULL DEFAULT 'RASCUNHO', publicar_em TEXT, expirar_em TEXT, imagem_ref TEXT, criado_em TEXT {TS_DEFAULT}, atualizado_em TEXT {TS_DEFAULT})""",
+    "CREATE INDEX IF NOT EXISTS idx_comunicados_tenant_status ON comunicados(academia_id,unidade_id,status)",
+    f"""CREATE TABLE IF NOT EXISTS notificacoes (id BIGSERIAL PRIMARY KEY, academia_id BIGINT NOT NULL, unidade_id BIGINT NOT NULL, pessoa_id BIGINT NOT NULL REFERENCES pessoas(id) ON DELETE CASCADE, comunicado_id BIGINT, tipo TEXT NOT NULL DEFAULT 'SISTEMA', categoria TEXT NOT NULL DEFAULT 'GERAL', prioridade TEXT NOT NULL DEFAULT 'NORMAL', titulo TEXT NOT NULL, corpo TEXT NOT NULL, url TEXT, lida INTEGER NOT NULL DEFAULT 0, lida_em TEXT, push_status TEXT NOT NULL DEFAULT 'PENDENTE', criado_em TEXT {TS_DEFAULT})""",
+    "CREATE INDEX IF NOT EXISTS idx_notificacoes_pessoa ON notificacoes(academia_id,unidade_id,pessoa_id,lida,id)",
+    f"""CREATE TABLE IF NOT EXISTS notificacao_preferencias (pessoa_id BIGINT PRIMARY KEY REFERENCES pessoas(id) ON DELETE CASCADE, comunicados INTEGER NOT NULL DEFAULT 1, financeiro INTEGER NOT NULL DEFAULT 1, treino INTEGER NOT NULL DEFAULT 1, sistema INTEGER NOT NULL DEFAULT 1, push INTEGER NOT NULL DEFAULT 1, atualizado_em TEXT {TS_DEFAULT})""",
 ]

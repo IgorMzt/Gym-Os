@@ -45,6 +45,7 @@
 
       {% if session.get('usuario_papel') in ['ADMIN','RECEPCAO'] %}
       <div class="admin-nav__section">OPERAÇÃO</div>
+      <a href="{{ url_for('comunicacao.pagina_comunicacao') }}" class="{{ 'ativo' if request.path.startswith('/comunicacao') else '' }}"><span>✉</span>Comunicação</a>
       <a href="{{ url_for('operacoes.pagina_catraca') }}" class="{{ 'ativo' if request.path in ['/catraca','/verificacao'] else '' }}"><span>⇥</span>Catraca</a>
       <a href="{{ url_for('operacoes.pagina_historico') }}" class="{{ 'ativo' if request.path == '/historico' else '' }}"><span>↺</span>Histórico</a>
       {% endif %}
@@ -70,8 +71,8 @@
 
     <div class="admin-sidebar__future">
       <span>PRÓXIMO MÓDULO</span>
-      <strong>SaaS · V6.14</strong>
-      <small>Planos, assinaturas, branding e aquisição comercial.</small>
+      <strong>Comunicação · V6.15</strong>
+      <small>Comunicados, notificações e relacionamento com alunos.</small>
     </div>
 
     <div class="admin-sidebar__footer">

@@ -37,3 +37,32 @@ def teste_push():
     if not resultado.get("enviadas"):
         return resposta_erro("Nenhum dispositivo ativo registrado.", 409, "SEM_DISPOSITIVO_PUSH")
     return jsonify({"sucesso": True, **resultado})
+
+@api_notificacoes_bp.get("")
+@aluno_token_obrigatorio
+def listar_notificacoes():
+    itens=database.listar_notificacoes_pessoa(g.aluno_id, request.args.get('limite',50), request.args.get('nao_lidas')=='1')
+    return jsonify({'sucesso':True,'nao_lidas':database.contar_notificacoes_nao_lidas(g.aluno_id),'notificacoes':itens})
+
+@api_notificacoes_bp.post("/<int:notificacao_id>/lida")
+@aluno_token_obrigatorio
+def marcar_lida(notificacao_id):
+    database.marcar_notificacao_lida(g.aluno_id,notificacao_id)
+    return jsonify({'sucesso':True,'nao_lidas':database.contar_notificacoes_nao_lidas(g.aluno_id)})
+
+@api_notificacoes_bp.post("/lidas")
+@aluno_token_obrigatorio
+def marcar_todas_lidas():
+    database.marcar_todas_notificacoes_lidas(g.aluno_id)
+    return jsonify({'sucesso':True,'nao_lidas':0})
+
+@api_notificacoes_bp.get("/preferencias")
+@aluno_token_obrigatorio
+def obter_preferencias():
+    return jsonify({'sucesso':True,'preferencias':database.preferencias_notificacao(g.aluno_id)})
+
+@api_notificacoes_bp.put("/preferencias")
+@aluno_token_obrigatorio
+def atualizar_preferencias():
+    database.salvar_preferencias_notificacao(g.aluno_id,request.get_json(silent=True) or {})
+    return jsonify({'sucesso':True,'preferencias':database.preferencias_notificacao(g.aluno_id)})

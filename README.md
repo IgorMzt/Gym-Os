@@ -413,3 +413,8 @@ Para conferir o estado SaaS via CLI:
 ```bash
 python manage.py saas-status
 ```
+
+
+## V6.15 — Comunicação
+
+A V6.15 adiciona uma central tenant-aware de comunicados e notificações. Administradores e recepção podem criar, segmentar, agendar e publicar comunicados; o aluno recebe uma caixa persistente no app, com leitura, preferências e push Expo. Eventos de treino e financeiro também passam a gerar notificações persistentes, e professores podem enviar mensagens aos próprios alunos. O schema atual é 25.

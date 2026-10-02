@@ -39,6 +39,7 @@ from routes.treinos import treinos_bp
 from routes.usuarios import usuarios_bp
 from routes.saas import saas_bp
 from routes.site import site_bp
+from routes.comunicacao import comunicacao_bp
 from routes.api import (
     api_agent_bp,
     api_aluno_bp,
@@ -212,6 +213,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.register_blueprint(media_bp)
     app.register_blueprint(saas_bp)
     app.register_blueprint(site_bp)
+    app.register_blueprint(comunicacao_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(professores_bp)

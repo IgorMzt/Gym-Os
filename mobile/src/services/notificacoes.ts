@@ -54,3 +54,10 @@ export async function removerPushDoBackend() {
 export async function enviarPushTeste() {
   return apiAutenticada('/api/v1/aluno/notificacoes/teste', { method: 'POST', body: '{}' });
 }
+
+export type NotificacaoAluno = { id:number; tipo:string; categoria:string; prioridade:string; titulo:string; corpo:string; url?:string|null; lida:number; criado_em:string };
+export async function listarNotificacoes() { return apiAutenticada<{sucesso:boolean;nao_lidas:number;notificacoes:NotificacaoAluno[]}>('/api/v1/aluno/notificacoes'); }
+export async function marcarNotificacaoLida(id:number) { return apiAutenticada(`/api/v1/aluno/notificacoes/${id}/lida`,{method:'POST',body:'{}'}); }
+export async function marcarTodasNotificacoesLidas() { return apiAutenticada('/api/v1/aluno/notificacoes/lidas',{method:'POST',body:'{}'}); }
+export async function obterPreferenciasNotificacao() { return apiAutenticada<{sucesso:boolean;preferencias:Record<string,number>}>('/api/v1/aluno/notificacoes/preferencias'); }
+export async function salvarPreferenciasNotificacao(preferencias:Record<string,boolean>) { return apiAutenticada('/api/v1/aluno/notificacoes/preferencias',{method:'PUT',body:JSON.stringify(preferencias)}); }

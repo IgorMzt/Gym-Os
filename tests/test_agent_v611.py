@@ -52,13 +52,13 @@ class AgentV611Tests(unittest.TestCase):
         return agente, token
 
     def test_schema_21_cria_tabelas_do_agente(self):
-        self.assertEqual(database.SCHEMA_VERSION, 24)
+        self.assertEqual(database.SCHEMA_VERSION, 25)
         conn = database.conectar()
         try:
             tabelas = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             self.assertTrue({"agentes_locais", "agente_comandos", "agente_eventos"}.issubset(tabelas))
             versao = conn.execute("SELECT valor FROM schema_meta WHERE chave='schema_version'").fetchone()[0]
-            self.assertEqual(versao, "24")
+            self.assertEqual(versao, "25")
         finally:
             conn.close()
 

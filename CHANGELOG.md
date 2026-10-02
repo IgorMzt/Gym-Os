@@ -1,3 +1,15 @@
+# V6.15 — Comunicação
+
+- Central de comunicados tenant-aware para administradores e recepção.
+- Caixa persistente de notificações no app do aluno, leitura e contador de não lidas.
+- Segmentação por unidade, academia ou aluno específico.
+- Rascunho, publicação imediata e agendamento de comunicados.
+- Preferências por categoria e opt-out de push.
+- Mensagens professor → aluno respeitando vínculo e permissões.
+- Eventos de treino e financeiro passam a alimentar a central além do push Expo.
+- Deep links mobile para treino, financeiro e notificações.
+- Schema 25 e testes de comunicação/isolamento.
+
 # Changelog
 
 ## V6.14 — SaaS completo
